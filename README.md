@@ -1,92 +1,96 @@
 # AutoCRM
 
-AutoCRM is an AI-powered Customer Relationship Management system that leverages generative AI to minimize support workload and enhance customer experience. By integrating existing help resources with LLM capabilities, AutoCRM delivers an interactive support and sales experience with minimal human involvement.
+An AI-powered customer relationship management system built with React, TypeScript, and Supabase.
+
+## Features
+
+- 🔐 Secure authentication with role-based access control
+- 🎫 Ticket management system with real-time updates
+- 👥 User management for administrators
+- 🤖 AI-assisted customer support features
+- 📱 Responsive design with modern UI
+- 🔄 Real-time updates using Supabase subscriptions
 
 ## Tech Stack
 
-- **Frontend**: Vite + React with TypeScript
-- **Styling**: Tailwind CSS + Shadcn UI
-- **Backend**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth
-- **Real-time Features**: Supabase Realtime
-- **AI Integration**: OpenAI + LangChain
-- **Testing**: Jest
-- **Deployment**: AWS Amplify
+- React 18
+- TypeScript
+- Supabase (Authentication, Database, Real-time subscriptions)
+- TailwindCSS
+- Shadcn/ui Components
+- React Router v6
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js (LTS version)
+- Node.js 16+
 - npm or yarn
-- Git
+- Supabase account and project
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
+git clone https://github.com/yourusername/autocrm.git
 cd autocrm
 ```
 
 2. Install dependencies:
 ```bash
 npm install
+# or
+yarn install
 ```
 
-3. Set up environment variables:
-Create a `.env` file in the root directory with the following variables:
+3. Create a `.env` file in the root directory with your Supabase credentials:
 ```env
-SUPABASE_URL=your_supabase_url_here
-SUPABASE_ANON_KEY=your_supabase_anon_key_here
-OPENAI_API_KEY=your_openai_api_key_here
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 4. Start the development server:
 ```bash
 npm run dev
+# or
+yarn dev
 ```
 
-## Core Features
+5. Open [http://localhost:5173](http://localhost:5173) to view the app
 
-- **Ticket Management System**: Advanced ticket tracking with flexible metadata
-- **API-First Design**: Seamless integration capabilities
-- **Employee Interface**: Efficient queue management and ticket handling
-- **Administrative Control**: Team management and routing intelligence
-- **Customer Portal**: Self-service tools and multi-channel support
-- **AI-Powered Features**: Chatbots and personalized suggestions
+### Database Setup
+
+1. Run the migrations in your Supabase project:
+   - Navigate to the SQL editor in your Supabase dashboard
+   - Run the migration files in the `supabase/migrations` directory in order
+
+2. Set up the required tables:
+   - profiles
+   - tickets
+   - ticket_notes
 
 ## Project Structure
 
 ```
-autocrm/
-├─ src/
-│  ├─ modules/           # Feature-based modules
-│  │  ├─ tickets/       # Ticket management
-│  │  ├─ auth/          # Authentication
-│  │  └─ ...
-│  ├─ ui/               # Shared UI components
-│  ├─ services/         # API services
-│  └─ utils/            # Helper functions
-├─ docs/                # Documentation
-├─ tests/               # Test files
-└─ public/              # Static assets
+src/
+├── lib/            # Utility functions and hooks
+├── modules/        # Feature modules
+│   ├── auth/       # Authentication related components
+│   ├── tickets/    # Ticket management
+│   └── admin/      # Admin features
+├── services/       # API and service layer
+├── ui/            # Reusable UI components
+└── types/         # TypeScript type definitions
 ```
-
-## Development Guidelines
-
-- Follow the mobile-first approach for responsive design
-- Maintain accessibility standards (WCAG 2.1)
-- Write tests for new features
-- Follow the established coding style and conventions
 
 ## Contributing
 
-1. Create a feature branch
-2. Make your changes
-3. Write or update tests
-4. Submit a pull request
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-[License Type] - See LICENSE file for details
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details

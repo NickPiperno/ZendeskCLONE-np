@@ -19,7 +19,7 @@ if (!supabaseAnonKey) {
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    autoRefreshToken: true,
+    autoRefreshToken: true
   },
   db: {
     schema: 'public'
