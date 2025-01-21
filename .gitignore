@@ -1,3 +1,21 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Production
+dist
+dist-ssr
+*.local
+
+# Environment files
+.env
+.env.*
+!.env.example
+
 # Logs
 logs
 *.log
@@ -7,14 +25,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea
 .DS_Store
 *.suo
@@ -23,5 +37,13 @@ dist-ssr
 *.sln
 *.sw?
 
-.env
-.env.*
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Supabase
+.branches
+.temp
+.supabase 
