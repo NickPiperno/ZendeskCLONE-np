@@ -1,5 +1,5 @@
 import type { Ticket, TicketInsert, TicketUpdate } from '../modules/tickets/types/ticket.types'
-import type { User, UserInsert, UserUpdate } from '../modules/auth/types/user.types'
+import type { UserProfile, UserProfileInsert, UserProfileUpdate } from '../modules/auth/types/user.types'
 
 export type Json =
   | string
@@ -18,9 +18,9 @@ export interface Database {
         Update: TicketUpdate
       }
       users: {
-        Row: User
-        Insert: UserInsert
-        Update: UserUpdate
+        Row: UserProfile
+        Insert: UserProfileInsert
+        Update: UserProfileUpdate
       }
     }
     Views: {
