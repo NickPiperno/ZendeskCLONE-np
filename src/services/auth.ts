@@ -1,5 +1,12 @@
+/**
+ * auth.ts
+ * Service for handling user authentication and authorization.
+ * Provides methods for user signup, signin, signout, and admin status checks.
+ */
+
 import { supabase } from './supabase'
-import type { UserRole } from '@/modules/auth/types/user.types'
+import type { AuthError, Session, AuthResponse } from '@supabase/supabase-js'
+import type { UserProfile } from '@/modules/auth/types/user.types'
 
 /**
  * Service for handling authentication
@@ -7,130 +14,117 @@ import type { UserRole } from '@/modules/auth/types/user.types'
 export class AuthService {
   /**
    * Sign up a new user
+   * @param email - User's email address
+   * @param password - User's password
+   * @param fullName - User's display name
+   * @returns Promise resolving to AuthResponse
    */
-  static async signUp(email: string, password: string, role: UserRole = 'user', fullName?: string) {
+  static async signUp(email: string, password: string, fullName: string): Promise<AuthResponse> {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const response = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            role,
             full_name: fullName
           }
         }
       })
 
-      if (error) throw error
-      return { data, error: null }
+      if (response.error) throw response.error
+      return response
     } catch (error) {
       console.error('Failed to sign up:', error)
-      return { data: null, error }
+      return { data: { user: null, session: null }, error: error as AuthError }
     }
   }
 
   /**
    * Sign in a user
+   * @param email - User's email address
+   * @param password - User's password
+   * @returns Promise resolving to AuthResponse
    */
-  static async signIn(email: string, password: string) {
+  static async signIn(email: string, password: string): Promise<AuthResponse> {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const response = await supabase.auth.signInWithPassword({
         email,
         password
       })
 
-      if (error) throw error
-      return { data, error: null }
+      if (response.error) throw response.error
+      return response
     } catch (error) {
       console.error('Failed to sign in:', error)
-      return { data: null, error }
+      return { data: { user: null, session: null }, error: error as AuthError }
     }
   }
 
   /**
    * Sign out the current user
+   * @returns Promise resolving to AuthResponse
    */
-  static async signOut() {
+  static async signOut(): Promise<{ error: AuthError | null }> {
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
       return { error: null }
     } catch (error) {
       console.error('Failed to sign out:', error)
-      return { error }
+      return { error: error as AuthError }
     }
   }
 
   /**
    * Get the current session
+   * @returns Promise resolving to session data
    */
-  static async getSession() {
+  static async getSession(): Promise<{ session: Session | null, error: AuthError | null }> {
     try {
       const { data: { session }, error } = await supabase.auth.getSession()
       if (error) throw error
       return { session, error: null }
     } catch (error) {
       console.error('Failed to get session:', error)
-      return { session: null, error }
+      return { session: null, error: error as AuthError }
     }
   }
 
   /**
-   * Get the current user's role
+   * Get the current user's profile
+   * @returns Promise resolving to UserProfile or null
    */
-  static async getCurrentUserRole(): Promise<UserRole | null> {
+  static async getCurrentProfile(): Promise<{ profile: UserProfile | null, error: Error | null }> {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return null
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
+      if (!user) return { profile: null, error: null }
 
-      // First try to get the profile
-      const { data: profile, error } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('role')
+        .select('*')
         .eq('id', user.id)
         .single()
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // Profile doesn't exist, create it
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              full_name: user.email?.split('@')[0] || 'New User',
-              role: 'user'
-            })
-            .select('role')
-            .single()
-
-          if (createError) throw createError
-          return newProfile?.role || null
-        }
-        throw error
-      }
-
-      return profile?.role || null
+      if (profileError) throw profileError
+      return { profile: profile as UserProfile, error: null }
     } catch (error) {
-      console.error('Failed to get user role:', error)
-      return null
+      console.error('Failed to get current profile:', error)
+      return { profile: null, error: error as Error }
     }
   }
 
   /**
-   * Update a user's role (admin only)
+   * Check if the current user is an admin
+   * @returns Promise resolving to boolean indicating admin status
    */
-  static async updateUserRole(userId: string, newRole: UserRole) {
+  static async isAdmin(): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ role: newRole })
-        .eq('id', userId)
-
-      if (error) throw error
-      return { error: null }
+      const { profile } = await this.getCurrentProfile()
+      return profile?.is_active && profile?.role === 'admin' || false
     } catch (error) {
-      console.error('Failed to update user role:', error)
-      return { error }
+      console.error('Failed to check admin status:', error)
+      return false
     }
   }
 } 

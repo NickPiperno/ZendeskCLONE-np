@@ -1,9 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
-import { cn } from '../../lib/utils'
+import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth/AuthContext'
-import { useState, useEffect } from 'react'
-import { AuthService } from '@/services/auth'
-import type { UserRole } from '@/modules/auth/types/user.types'
 import { Button } from '@/ui/components/button'
 
 interface MainLayoutProps {
@@ -11,18 +8,7 @@ interface MainLayoutProps {
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
-  const { user } = useAuth()
-  const [userRole, setUserRole] = useState<UserRole | null>(null)
-
-  useEffect(() => {
-    const fetchRole = async () => {
-      const role = await AuthService.getCurrentUserRole()
-      setUserRole(role)
-    }
-    if (user) {
-      fetchRole()
-    }
-  }, [user])
+  const { profile, signOut } = useAuth()
 
   return (
     <div className="min-h-screen bg-background">
@@ -40,7 +26,13 @@ export function MainLayout({ children }: MainLayoutProps) {
             )}>
               Dashboard
             </NavLink>
-            {(userRole === 'agent' || userRole === 'admin') && (
+            <NavLink to="/tickets" className={({ isActive }) => cn(
+              "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2",
+              isActive ? "bg-accent text-accent-foreground" : "text-foreground"
+            )}>
+              Tickets
+            </NavLink>
+            {(profile?.role === 'agent' || profile?.role === 'admin') && profile?.is_active && (
               <NavLink to="/agent" className={({ isActive }) => cn(
                 "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2",
                 isActive ? "bg-accent text-accent-foreground" : "text-foreground"
@@ -48,18 +40,12 @@ export function MainLayout({ children }: MainLayoutProps) {
                 Agent Dashboard
               </NavLink>
             )}
-            <NavLink to="/tickets" className={({ isActive }) => cn(
-              "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2",
-              isActive ? "bg-accent text-accent-foreground" : "text-foreground"
-            )}>
-              Tickets
-            </NavLink>
-            {userRole === 'admin' && (
+            {profile?.role === 'admin' && profile?.is_active && (
               <NavLink to="/admin/users" className={({ isActive }) => cn(
                 "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2",
                 isActive ? "bg-accent text-accent-foreground" : "text-foreground"
               )}>
-                Users
+                User Management
               </NavLink>
             )}
             <NavLink to="/settings" className={({ isActive }) => cn(
@@ -68,11 +54,7 @@ export function MainLayout({ children }: MainLayoutProps) {
             )}>
               Settings
             </NavLink>
-            <Button 
-              variant="ghost" 
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={() => AuthService.signOut()}
-            >
+            <Button variant="outline" onClick={() => signOut()}>
               Sign Out
             </Button>
           </nav>

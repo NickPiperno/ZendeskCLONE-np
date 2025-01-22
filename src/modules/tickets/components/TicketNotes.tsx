@@ -95,7 +95,7 @@ export function TicketNotes({ ticketId }: TicketNotesProps) {
             value={newNote}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewNote(e.target.value)}
             placeholder="Add a note..."
-            className="min-h-[100px]"
+            className="min-h-[80px]"
             required
           />
           <div className="flex items-center gap-2">

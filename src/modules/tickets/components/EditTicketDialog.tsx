@@ -153,7 +153,7 @@ interface EditTicketDialogProps {
 export function EditTicketDialog({ ticket, open, onOpenChange, onSuccess }: EditTicketDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Ticket</DialogTitle>
           <DialogDescription>
@@ -161,7 +161,7 @@ export function EditTicketDialog({ ticket, open, onOpenChange, onSuccess }: Edit
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6">
+        <div className="grid gap-4">
           <EditTicketForm
             ticket={ticket}
             onSuccess={() => {
@@ -171,8 +171,8 @@ export function EditTicketDialog({ ticket, open, onOpenChange, onSuccess }: Edit
             onCancel={() => onOpenChange(false)}
           />
 
-          <div className="border-t pt-6">
-            <h3 className="font-medium mb-4">Notes & Updates</h3>
+          <div className="border-t pt-4">
+            <h3 className="font-medium mb-2">Notes & Updates</h3>
             <TicketNotes ticketId={ticket.id} />
           </div>
         </div>

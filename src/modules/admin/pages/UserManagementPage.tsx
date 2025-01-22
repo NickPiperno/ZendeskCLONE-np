@@ -15,17 +15,6 @@ interface UserProfile {
   is_active: boolean
 }
 
-interface DbProfile {
-  id: string
-  full_name: string | null
-  role: UserRole
-  created_at: string
-  is_active: boolean
-  auth_users: {
-    email: string
-  }
-}
-
 export function UserManagementPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -37,8 +26,8 @@ export function UserManagementPage() {
   // Verify admin access
   useEffect(() => {
     const checkAdminAccess = async () => {
-      const role = await AuthService.getCurrentUserRole()
-      if (role !== 'admin') {
+      const { profile } = await AuthService.getCurrentProfile()
+      if (!profile?.is_active || profile?.role !== 'admin') {
         navigate('/dashboard')
       }
     }
@@ -51,28 +40,13 @@ export function UserManagementPage() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select(`
-            id,
-            full_name,
-            role,
-            created_at,
-            is_active,
-            auth_users:auth.users(email)
-          `)
+          .select('*')
           .order('created_at', { ascending: false })
 
         if (error) throw error
 
         if (data) {
-          const profiles = data as unknown as DbProfile[]
-          setUsers(profiles.map(profile => ({
-            id: profile.id,
-            email: profile.auth_users.email,
-            full_name: profile.full_name,
-            role: profile.role,
-            created_at: profile.created_at,
-            is_active: profile.is_active
-          })))
+          setUsers(data as UserProfile[])
         }
       } catch (err) {
         console.error('Error fetching users:', err)
@@ -95,7 +69,11 @@ export function UserManagementPage() {
     setError(null)
 
     try {
-      const { error } = await AuthService.updateUserRole(userId, newRole)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('id', userId)
+      
       if (error) throw error
 
       setUsers(users.map(u => 
