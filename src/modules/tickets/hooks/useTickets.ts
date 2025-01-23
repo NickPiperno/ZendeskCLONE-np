@@ -6,11 +6,15 @@ import type { Ticket, TicketStatus, TicketPriority } from '../types/ticket.types
 interface UseTicketsFilters {
   status?: TicketStatus
   priority?: TicketPriority
+  assignedTo?: string | true | null  // string = specific agent, true = any agent, null = unassigned
 }
 
 /**
  * Hook for fetching and managing tickets
- * Supports filtering by status and priority
+ * Supports filtering by:
+ * - Status
+ * - Priority
+ * - Assignment (unassigned, specific agent, or any agent)
  * Includes real-time updates via Supabase
  */
 export function useTickets(filters?: UseTicketsFilters) {
@@ -24,7 +28,8 @@ export function useTickets(filters?: UseTicketsFilters) {
 
     const { data, error: fetchError } = await TicketService.getTickets({
       status: filters?.status,
-      priority: filters?.priority
+      priority: filters?.priority,
+      assignedTo: filters?.assignedTo
     })
 
     setLoading(false)
@@ -73,7 +78,7 @@ export function useTickets(filters?: UseTicketsFilters) {
     return () => {
       channel.unsubscribe()
     }
-  }, [filters?.status, filters?.priority])
+  }, [filters?.status, filters?.priority, filters?.assignedTo])
 
   return {
     tickets,

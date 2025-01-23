@@ -9,15 +9,30 @@ export const TicketErrorCodes = {
   CREATE_ERROR: 'TICKET_CREATE_ERROR',
   UPDATE_ERROR: 'TICKET_UPDATE_ERROR',
   DELETE_ERROR: 'TICKET_DELETE_ERROR',
-  FETCH_ERROR: 'TICKET_FETCH_ERROR'
+  FETCH_ERROR: 'TICKET_FETCH_ERROR',
+  SKILL_ERROR: 'TICKET_SKILL_ERROR',
+  ASSIGNMENT_ERROR: 'TICKET_ASSIGNMENT_ERROR'
 } as const
 
 type TicketErrorCode = typeof TicketErrorCodes[keyof typeof TicketErrorCodes]
 
 interface TicketError {
-  code: TicketErrorCode
+  code?: TicketErrorCode
   message: string
   details?: unknown
+}
+
+interface TicketSkill {
+  id: string
+  ticket_id: string
+  skill_id: string
+  required_proficiency: number
+}
+
+interface AgentMatch {
+  agent_id: string
+  match_score: number
+  reason: string
 }
 
 /**
@@ -126,7 +141,7 @@ export class TicketService {
    * Fetch tickets with optional filters
    */
   static async getTickets(options?: {
-    assignedTo?: string
+    assignedTo?: string | true | null  // string = specific agent, true = any agent, null = unassigned
     status?: Ticket['status']
     priority?: Ticket['priority']
     limit?: number
@@ -149,9 +164,18 @@ export class TicketService {
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (options?.assignedTo) {
+      // Handle assignment filters
+      if (options?.assignedTo === null) {
+        // Unassigned tickets
+        query = query.is('assigned_to', null)
+      } else if (options?.assignedTo === true) {
+        // Any assigned tickets
+        query = query.not('assigned_to', 'is', null)
+      } else if (options?.assignedTo) {
+        // Specific agent
         query = query.eq('assigned_to', options.assignedTo)
       }
+
       if (options?.status) {
         query = query.eq('status', options.status)
       }
@@ -286,6 +310,145 @@ export class TicketService {
       console.error('Failed to delete ticket:', ticketError)
       return { 
         error: ticketError.message || 'An unexpected error occurred while deleting the ticket'
+      }
+    }
+  }
+
+  /**
+   * Add required skills to a ticket
+   */
+  static async addTicketSkills(ticketId: string, skills: { skillId: string, requiredProficiency: number }[]): Promise<TicketSkill[] | TicketError> {
+    try {
+      const { data, error } = await supabase
+        .from('ticket_skills')
+        .insert(
+          skills.map(skill => ({
+            ticket_id: ticketId,
+            skill_id: skill.skillId,
+            required_proficiency: skill.requiredProficiency
+          }))
+        )
+        .select()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error adding ticket skills:', error)
+      return {
+        code: TicketErrorCodes.SKILL_ERROR,
+        message: 'Failed to add ticket skills',
+        details: error
+      }
+    }
+  }
+
+  /**
+   * Get required skills for a ticket
+   */
+  static async getTicketSkills(ticketId: string): Promise<TicketSkill[] | TicketError> {
+    try {
+      const { data, error } = await supabase
+        .from('ticket_skills')
+        .select('*')
+        .eq('ticket_id', ticketId)
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error getting ticket skills:', error)
+      return {
+        code: TicketErrorCodes.SKILL_ERROR,
+        message: 'Failed to get ticket skills',
+        details: error
+      }
+    }
+  }
+
+  /**
+   * Find best agent match for a ticket
+   */
+  static async findBestAgentMatch(ticketId: string): Promise<AgentMatch[] | TicketError> {
+    try {
+      const { data, error } = await supabase
+        .rpc('find_best_agent_match', { ticket_id: ticketId })
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error finding agent match:', error)
+      return {
+        code: TicketErrorCodes.ASSIGNMENT_ERROR,
+        message: 'Failed to find agent match',
+        details: error
+      }
+    }
+  }
+
+  /**
+   * Automatically assign ticket to best matching agent
+   */
+  static async autoAssignTicket(ticketId: string): Promise<string | TicketError> {
+    try {
+      const { data, error } = await supabase
+        .rpc('auto_assign_ticket', { ticket_id: ticketId })
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error auto-assigning ticket:', error)
+      return {
+        code: TicketErrorCodes.ASSIGNMENT_ERROR,
+        message: 'Failed to auto-assign ticket',
+        details: error
+      }
+    }
+  }
+
+  /**
+   * Remove a skill from a ticket
+   */
+  static async removeTicketSkill(skillId: string): Promise<{ error: string | null }> {
+    try {
+      const { error } = await supabase
+        .from('ticket_skills')
+        .delete()
+        .eq('id', skillId)
+
+      if (error) throw error
+      return { error: null }
+    } catch (error) {
+      console.error('Error removing ticket skill:', error)
+      return {
+        error: 'Failed to remove skill from ticket'
+      }
+    }
+  }
+
+  /**
+   * Manually trigger re-assignment of a ticket
+   */
+  static async reassignTicket(ticketId: string): Promise<{ data: string | null, error: string | null }> {
+    try {
+      const { data, error } = await supabase
+        .rpc('auto_assign_ticket', { p_ticket_id: ticketId })
+
+      if (error) throw error
+
+      // If an agent was assigned, return their ID
+      if (data) {
+        return { data, error: null }
+      }
+
+      // If no agent was found
+      return { 
+        data: null, 
+        error: 'No suitable agent found. Check required skills and agent availability.' 
+      }
+    } catch (error) {
+      console.error('Error reassigning ticket:', error)
+      return {
+        data: null,
+        error: 'Failed to reassign ticket'
       }
     }
   }

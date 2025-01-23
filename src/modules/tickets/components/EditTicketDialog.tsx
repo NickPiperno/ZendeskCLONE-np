@@ -9,6 +9,7 @@ import { Button } from "@/ui/components/button"
 import { useState } from "react"
 import { TicketService } from "@/services/tickets"
 import { TicketNotes } from "./TicketNotes"
+import { TicketSkillsDialog } from "./TicketSkillsDialog"
 import type { Ticket, TicketStatus, TicketPriority } from "../types/ticket.types"
 
 interface EditTicketFormProps {
@@ -151,6 +152,8 @@ interface EditTicketDialogProps {
 }
 
 export function EditTicketDialog({ ticket, open, onOpenChange, onSuccess }: EditTicketDialogProps) {
+  const [skillsDialogOpen, setSkillsDialogOpen] = useState(false)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -172,11 +175,31 @@ export function EditTicketDialog({ ticket, open, onOpenChange, onSuccess }: Edit
           />
 
           <div className="border-t pt-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-medium">Required Skills</h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSkillsDialogOpen(true)}
+              >
+                Manage Skills
+              </Button>
+            </div>
+          </div>
+
+          <div className="border-t pt-4">
             <h3 className="font-medium mb-2">Notes & Updates</h3>
             <TicketNotes ticketId={ticket.id} />
           </div>
         </div>
       </DialogContent>
+
+      <TicketSkillsDialog
+        ticketId={ticket.id}
+        open={skillsDialogOpen}
+        onOpenChange={setSkillsDialogOpen}
+        onSkillsUpdated={onSuccess}
+      />
     </Dialog>
   )
 } 

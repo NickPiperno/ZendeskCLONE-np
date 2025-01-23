@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Button } from '@/ui/components/button'
 import { useAuth } from '@/lib/auth/AuthContext'
 import { TeamService } from '@/services/teams'
-import { supabase } from '@/services/supabase'
 import type { Team, TeamMember, TeamSchedule } from '@/modules/teams/types/team.types'
 import { NewTeamDialog } from '@/modules/admin/components/teams/NewTeamDialog'
 import { EditTeamDialog } from '@/modules/admin/components/teams/EditTeamDialog'
@@ -18,7 +16,6 @@ import type { UserSkill, Skill } from '@/modules/teams/types/team.types'
  */
 export function TeamManagementPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const [teams, setTeams] = useState<Team[]>([])
   const [teamMembers, setTeamMembers] = useState<Record<string, (TeamMember & { user: any })[]>>({})
   const [teamSchedules, setTeamSchedules] = useState<Record<string, (TeamSchedule & { user: any })[]>>({})
@@ -29,27 +26,39 @@ export function TeamManagementPage() {
   const [managingSchedule, setManagingSchedule] = useState<Team | null>(null)
   const [managingMembers, setManagingMembers] = useState<Team | null>(null)
   const [userSkills, setUserSkills] = useState<Record<string, (UserSkill & { skill: Skill })[]>>({})
+  const [currentTime, setCurrentTime] = useState(new Date())
 
-  // Verify admin access
+  // Update current time every minute
   useEffect(() => {
-    const checkAdminAccess = async () => {
-      if (!user) {
-        navigate('/login')
-        return
-      }
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60000) // Update every minute
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
+    return () => clearInterval(timer)
+  }, [])
 
-      if (profile?.role !== 'admin') {
-        navigate('/dashboard')
-      }
-    }
-    checkAdminAccess()
-  }, [navigate, user])
+  // Helper function to check if a user is currently working
+  const isUserWorking = (userId: string, teamId: string): boolean => {
+    const schedules = teamSchedules[teamId]?.filter(s => s.user_id === userId) || []
+    if (!schedules.length) return false
+
+    const now = currentTime
+    const currentDay = now.getDay() || 7 // Convert Sunday (0) to 7 to match ISO weekday
+    const currentHour = now.getHours()
+    const currentMinute = now.getMinutes()
+    const currentTimeMinutes = currentHour * 60 + currentMinute
+
+    return schedules.some(schedule => {
+      if (schedule.day_of_week !== currentDay) return false
+
+      const [startHour, startMinute] = schedule.start_time.split(':').map(Number)
+      const [endHour, endMinute] = schedule.end_time.split(':').map(Number)
+      const startTimeMinutes = startHour * 60 + startMinute
+      const endTimeMinutes = endHour * 60 + endMinute
+
+      return currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes
+    })
+  }
 
   const fetchData = async () => {
     if (!user) return // Don't fetch if not authenticated
@@ -150,12 +159,8 @@ export function TeamManagementPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Team Management</h1>
-          <p className="text-muted-foreground">Manage teams, skills, and schedules</p>
-        </div>
+    <div className="space-y-6">
+      <div className="flex justify-end">
         <NewTeamDialog onTeamCreated={handleTeamCreated} />
       </div>
 
@@ -231,7 +236,16 @@ export function TeamManagementPage() {
                       <div>
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="font-medium">{member.user.full_name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{member.user.full_name}</p>
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
+                                isUserWorking(member.user_id, team.id)
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {isUserWorking(member.user_id, team.id) ? 'Working Now' : 'Not Working'}
+                              </span>
+                            </div>
                             <p className="text-sm text-muted-foreground">
                               {member.user.email}
                             </p>

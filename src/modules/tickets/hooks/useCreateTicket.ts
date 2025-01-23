@@ -16,7 +16,7 @@ export function useCreateTicket() {
       setLoading(true)
       setError(null)
 
-      const { error: serviceError } = await TicketService.createTicket(ticket)
+      const { data, error: serviceError } = await TicketService.createTicket(ticket)
 
       if (serviceError) {
         throw new Error(serviceError)
@@ -29,11 +29,11 @@ export function useCreateTicket() {
         payload: {}
       })
 
-      return true
+      return data
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to create ticket'
       setError(message)
-      return false
+      return null
     } finally {
       setLoading(false)
     }

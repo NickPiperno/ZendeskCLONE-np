@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Button } from '@/ui/components/button'
 import { useAuth } from '@/lib/auth/AuthContext'
 import { supabase } from '@/services/supabase'
-import { AuthService } from '@/services/auth'
 import type { UserRole } from '@/modules/auth/types/user.types'
 
 interface UserProfile {
@@ -17,22 +15,10 @@ interface UserProfile {
 
 export function UserManagementPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
-
-  // Verify admin access
-  useEffect(() => {
-    const checkAdminAccess = async () => {
-      const { profile } = await AuthService.getCurrentProfile()
-      if (!profile?.is_active || profile?.role !== 'admin') {
-        navigate('/dashboard')
-      }
-    }
-    checkAdminAccess()
-  }, [navigate])
 
   // Fetch users
   useEffect(() => {
@@ -124,12 +110,7 @@ export function UserManagementPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">User Management</h1>
-        <p className="text-muted-foreground">Manage user roles and permissions</p>
-      </div>
-
+    <div className="space-y-6">
       {error && (
         <div className="p-4 rounded-md bg-destructive/10 text-destructive">
           {error}
