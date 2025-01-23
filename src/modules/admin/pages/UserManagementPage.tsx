@@ -87,6 +87,34 @@ export function UserManagementPage() {
     }
   }
 
+  const handleStatusUpdate = async (userId: string, newStatus: boolean) => {
+    if (userId === user?.id) {
+      setError("You cannot change your own status")
+      return
+    }
+
+    setUpdatingUserId(userId)
+    setError(null)
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: newStatus })
+        .eq('id', userId)
+      
+      if (error) throw error
+
+      setUsers(users.map(u => 
+        u.id === userId ? { ...u, is_active: newStatus } : u
+      ))
+    } catch (err) {
+      console.error('Error updating status:', err)
+      setError('Failed to update user status')
+    } finally {
+      setUpdatingUserId(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[200px]">
@@ -144,11 +172,22 @@ export function UserManagementPage() {
                 <div className="col-span-2">
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
                     user.is_active
-                      ? 'bg-success/10 text-success'
-                      : 'bg-muted text-muted-foreground'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-600'
                   }`}>
                     {user.is_active ? 'Active' : 'Inactive'}
                   </span>
+                </div>
+                <div className="col-span-2">
+                  <Button
+                    variant={user.is_active ? "outline" : "secondary"}
+                    size="sm"
+                    onClick={() => handleStatusUpdate(user.id, !user.is_active)}
+                    disabled={updatingUserId === user.id}
+                    className="w-full"
+                  >
+                    {user.is_active ? 'Deactivate' : 'Activate'}
+                  </Button>
                 </div>
                 <div className="col-span-2">
                   {updatingUserId === user.id ? (

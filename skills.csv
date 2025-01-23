@@ -1,0 +1,23 @@
+name,description,category,is_active
+"Ticket System","Proficiency in using and troubleshooting the ticket management system","technical",true
+"Knowledge Base Management","Ability to create, update and manage knowledge base articles","technical",true
+"Chat Support","Experience with live chat support systems and real-time customer interaction","technical",true
+"Email Support","Proficiency in email-based customer support and communication","technical",true
+"CRM Tools","Experience with CRM software and customer data management","technical",true
+"Product Knowledge","Deep understanding of product features and capabilities","product",true
+"Technical Troubleshooting","Ability to diagnose and resolve technical issues","product",true
+"Feature Training","Capability to train customers on product features","product",true
+"Integration Support","Knowledge of product integrations and API functionality","product",true
+"Bug Reporting","Ability to effectively document and report software issues","product",true
+"English","Professional business English communication","language",true
+"Spanish","Professional business Spanish communication","language",true
+"French","Professional business French communication","language",true
+"German","Professional business German communication","language",true
+"Mandarin","Professional business Mandarin communication","language",true
+"Customer Communication","Excellent written and verbal communication with customers","soft_skill",true
+"Problem Solving","Strong analytical and problem-solving abilities","soft_skill",true
+"Empathy","Ability to understand and address customer concerns with empathy","soft_skill",true
+"Time Management","Efficient handling of multiple tickets and priorities","soft_skill",true
+"Team Collaboration","Effective cooperation with team members and other departments","soft_skill",true
+"Conflict Resolution","Ability to handle difficult situations and de-escalate conflicts","soft_skill",true
+"Documentation","Clear and concise documentation of customer interactions","soft_skill",true 

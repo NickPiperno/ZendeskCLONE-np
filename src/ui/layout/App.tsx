@@ -8,6 +8,7 @@ import { TicketsPage } from '@/modules/tickets/pages/TicketsPage'
 import { SettingsPage } from '@/modules/settings/pages/SettingsPage'
 import { AgentDashboardPage } from '@/modules/tickets/pages/AgentDashboardPage'
 import { UserManagementPage } from '@/modules/admin/pages/UserManagementPage'
+import { TeamManagementPage } from '@/modules/admin/pages/TeamManagementPage'
 import { TestDbPage } from '@/modules/admin/pages/TestDbPage'
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="/agent" element={<AgentDashboardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/admin/users" element={<UserManagementPage />} />
+            <Route path="/admin/teams" element={<TeamManagementPage />} />
             <Route path="/admin/test-db" element={<TestDbPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
