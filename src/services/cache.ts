@@ -15,16 +15,16 @@ class CacheService {
   private readonly maxItems: number;
 
   constructor(maxItems = 100) {
-    this.memoryCache = new Map();
+    this.memoryCache = new Map<string, CacheItem<any>>();
     this.maxItems = maxItems;
   }
 
   /**
    * Set a value in both memory and localStorage with TTL
    */
-  set<T>(key: string | undefined, value: T, ttlMinutes = 5): void {
-    if (!key || typeof key !== 'string') {
-      console.warn('Cache key must be a non-empty string');
+  set<T>(key: string, value: T, ttlMinutes = 5): void {
+    if (!key) {
+      console.warn('Cache key cannot be empty');
       return;
     }
 
@@ -53,9 +53,9 @@ class CacheService {
   /**
    * Get a value from cache (memory first, then localStorage)
    */
-  get<T>(key: string | undefined): T | null {
-    if (!key || typeof key !== 'string') {
-      console.warn('Cache key must be a non-empty string');
+  get<T>(key: string): T | null {
+    if (!key) {
+      console.warn('Cache key cannot be empty');
       return null;
     }
 
@@ -90,9 +90,9 @@ class CacheService {
   /**
    * Remove item from both caches
    */
-  remove(key: string | undefined): void {
-    if (!key || typeof key !== 'string') {
-      console.warn('Cache key must be a non-empty string');
+  remove(key: string): void {
+    if (!key) {
+      console.warn('Cache key cannot be empty');
       return;
     }
     
