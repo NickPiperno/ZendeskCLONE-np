@@ -11,6 +11,12 @@ CREATE TABLE public.ticket_notes (
     deleted_at TIMESTAMPTZ
 );
 
+-- Add foreign key constraint for profiles
+ALTER TABLE public.ticket_notes
+    ADD CONSTRAINT ticket_notes_created_by_fkey
+    FOREIGN KEY (created_by)
+    REFERENCES public.profiles(id);
+
 -- Enable RLS
 ALTER TABLE public.ticket_notes ENABLE ROW LEVEL SECURITY;
 

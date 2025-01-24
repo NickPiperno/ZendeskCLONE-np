@@ -4,6 +4,7 @@ import { Textarea } from '@/ui/components/textarea'
 import { Checkbox } from '@/ui/components/checkbox'
 import { useTicketNotes } from '../hooks/useTicketNotes'
 import { TicketNoteService } from '@/services/ticket-notes'
+import { useAuth } from '@/lib/auth/AuthContext'
 import type { TicketNote } from '../types/ticket-note.types'
 
 interface TicketNotesProps {
@@ -16,10 +17,14 @@ interface TicketNotesProps {
  */
 export function TicketNotes({ ticketId }: TicketNotesProps) {
   const { notes, loading, error, refetch } = useTicketNotes(ticketId)
+  const { profile } = useAuth()
   const [newNote, setNewNote] = useState('')
-  const [isInternal, setIsInternal] = useState(true)
+  const [isInternal, setIsInternal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  // Check if user can create internal notes
+  const canCreateInternalNotes = profile?.role === 'admin' || profile?.role === 'agent'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -34,7 +39,7 @@ export function TicketNotes({ ticketId }: TicketNotesProps) {
     const { error } = await TicketNoteService.createNote({
       ticket_id: ticketId,
       content: newNote.trim(),
-      is_internal: isInternal
+      is_internal: canCreateInternalNotes && isInternal
     })
 
     setSubmitting(false)
@@ -98,16 +103,18 @@ export function TicketNotes({ ticketId }: TicketNotesProps) {
             className="min-h-[80px]"
             required
           />
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="is-internal"
-              checked={isInternal}
-              onCheckedChange={(checked) => setIsInternal(checked as boolean)}
-            />
-            <label htmlFor="is-internal" className="text-sm text-muted-foreground">
-              Internal note (only visible to team members)
-            </label>
-          </div>
+          {canCreateInternalNotes && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="is-internal"
+                checked={isInternal}
+                onCheckedChange={(checked) => setIsInternal(checked as boolean)}
+              />
+              <label htmlFor="is-internal" className="text-sm text-muted-foreground">
+                Internal note (only visible to team members)
+              </label>
+            </div>
+          )}
         </div>
 
         <Button type="submit" disabled={submitting}>
@@ -131,11 +138,10 @@ export function TicketNotes({ ticketId }: TicketNotesProps) {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <p className="whitespace-pre-wrap">{note.content}</p>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>
                       {new Date(note.created_at).toLocaleDateString()} at{' '}
-                      {new Date(note.created_at).toLocaleTimeString()}
+                      {new Date(note.created_at).toLocaleTimeString()} • {note.profiles.full_name}
                     </span>
                     {note.is_internal && (
                       <span className="px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
@@ -143,6 +149,7 @@ export function TicketNotes({ ticketId }: TicketNotesProps) {
                       </span>
                     )}
                   </div>
+                  <p className="whitespace-pre-wrap">{note.content}</p>
                 </div>
                 <Button
                   variant="ghost"

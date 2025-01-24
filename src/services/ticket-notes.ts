@@ -79,6 +79,7 @@ export class TicketNoteService {
         .from('ticket_notes')
         .insert([{
           ...note,
+          created_by: user.id,
           is_internal: note.is_internal ?? true
         }])
         .select()
@@ -129,12 +130,27 @@ export class TicketNoteService {
 
       const { data, error } = await supabase
         .from('ticket_notes')
-        .select('*')
+        .select(`
+          *,
+          profiles (
+            full_name,
+            email
+          )
+        `)
         .eq('ticket_id', ticketId)
+        .is('deleted', false)  // Only fetch non-deleted notes
         .order('created_at', { ascending: true })
 
       if (error) {
         console.error('Supabase error:', error)
+        // Check if it's a permission error
+        if (error.code === '42501' || error.code === 'PGRST301') {
+          throw {
+            code: TicketNoteErrorCodes.UNAUTHORIZED,
+            message: 'You do not have permission to view these notes',
+            details: error
+          }
+        }
         throw {
           code: TicketNoteErrorCodes.FETCH_ERROR,
           message: 'Failed to fetch notes',
@@ -143,7 +159,7 @@ export class TicketNoteService {
       }
 
       console.log(`Successfully fetched ${data?.length || 0} notes`)
-      return { data: data as TicketNote[], error: null }
+      return { data: data as (TicketNote & { author: { full_name: string; email: string } })[], error: null }
     } catch (error) {
       const noteError = error as TicketNoteError
       console.error('Failed to fetch notes:', {

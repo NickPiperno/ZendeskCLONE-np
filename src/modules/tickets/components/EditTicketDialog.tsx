@@ -11,6 +11,7 @@ import { TicketService } from "@/services/tickets"
 import { TicketNotes } from "./TicketNotes"
 import { TicketSkillsDialog } from "./TicketSkillsDialog"
 import type { Ticket, TicketStatus, TicketPriority } from "../types/ticket.types"
+import { useQueryClient } from '@tanstack/react-query'
 
 interface EditTicketFormProps {
   ticket: Ticket
@@ -25,6 +26,7 @@ function EditTicketForm({ ticket, onSuccess, onCancel }: EditTicketFormProps) {
   const [priority, setPriority] = useState<TicketPriority>(ticket.priority)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -48,6 +50,9 @@ function EditTicketForm({ ticket, onSuccess, onCancel }: EditTicketFormProps) {
     if (error) {
       setError(error)
     } else {
+      queryClient.invalidateQueries({
+        queryKey: ['ticketTimeline', ticket.id]
+      })
       onSuccess?.()
     }
   }

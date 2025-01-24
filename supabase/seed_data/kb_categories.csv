@@ -1,0 +1,11 @@
+id,name,description,is_active,deleted
+7e9d02c7-495d-48b8-8c74-5aa673e9acd5,Getting Started,Essential guides for new users,true,false
+a6bfdea9-5132-4cee-87b8-e609d62259f9,Account Management,Managing your account settings and preferences,true,false
+c80b1ea3-4430-4e04-ada4-73ae2b59f507,Billing & Subscriptions,Information about billing cycles and subscription management,true,false
+0a3a962e-ff09-417b-ad08-1cab8da516d3,Security & Privacy,Security best practices and privacy policies,true,false
+794cf2d7-0429-498b-991f-7eede4cd98d4,Troubleshooting,Common issues and their solutions,true,false
+608ee611-cce3-42ad-a1e7-ca2302c871fd,Feature Guides,Detailed guides for specific features,true,false
+2812f907-1729-42fc-9885-51d00d227b95,API Documentation,API integration guides and reference,true,false
+779bfb5a-ee2c-4730-8b91-caa3d7c57d22,Best Practices,Recommended ways to use the platform,true,false
+84e77b11-995b-4463-a89b-91e0b8a38ec2,Updates & News,Platform updates and feature announcements,true,false
+64d0415c-489d-41f9-b7de-00d09ce2e410,FAQs,Frequently asked questions and answers,true,false

@@ -4,6 +4,7 @@ import { useCreateTicket } from '../hooks/useCreateTicket'
 import type { TicketPriority } from '../types/ticket.types'
 import { TicketSkillsDialog } from './TicketSkillsDialog'
 import { useAuth } from '@/lib/auth/AuthContext'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface NewTicketFormProps {
   onSuccess?: () => void
@@ -22,6 +23,7 @@ export function NewTicketForm({ onSuccess, onCancel }: NewTicketFormProps) {
   const [priority, setPriority] = useState<TicketPriority>('medium')
   const [newTicketId, setNewTicketId] = useState<string | null>(null)
   const [skillsDialogOpen, setSkillsDialogOpen] = useState(false)
+  const queryClient = useQueryClient()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -37,6 +39,10 @@ export function NewTicketForm({ onSuccess, onCancel }: NewTicketFormProps) {
     })
 
     if (result) {
+      // Invalidate the customerTickets query to refetch the list
+      queryClient.invalidateQueries({ queryKey: ['customerTickets'] })
+      queryClient.invalidateQueries({ queryKey: ['ticketSummary'] })
+
       // Only open skills dialog for admins
       if (isAdmin) {
         setNewTicketId(result.id)
