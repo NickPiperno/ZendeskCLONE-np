@@ -22,7 +22,7 @@ class CacheService {
   /**
    * Set a value in both memory and localStorage with TTL
    */
-  set<T>(key: string, value: T, ttlMinutes = 5): void {
+  set<T>(key: string | undefined, value: T, ttlMinutes = 5): void {
     if (!key || typeof key !== 'string') {
       console.warn('Cache key must be a non-empty string');
       return;
@@ -53,7 +53,12 @@ class CacheService {
   /**
    * Get a value from cache (memory first, then localStorage)
    */
-  get<T>(key: string): T | null {
+  get<T>(key: string | undefined): T | null {
+    if (!key || typeof key !== 'string') {
+      console.warn('Cache key must be a non-empty string');
+      return null;
+    }
+
     // Try memory cache first
     const memoryItem = this.memoryCache.get(key);
     if (memoryItem) {
@@ -85,7 +90,12 @@ class CacheService {
   /**
    * Remove item from both caches
    */
-  remove(key: string): void {
+  remove(key: string | undefined): void {
+    if (!key || typeof key !== 'string') {
+      console.warn('Cache key must be a non-empty string');
+      return;
+    }
+    
     this.memoryCache.delete(key);
     try {
       localStorage.removeItem(key);
