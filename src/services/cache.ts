@@ -20,20 +20,11 @@ class CacheService {
   }
 
   /**
-   * Type guard to ensure key is a valid string
-   */
-  private isValidKey(key: unknown): key is string {
-    return typeof key === 'string' && key.length > 0;
-  }
-
-  /**
    * Set a value in both memory and localStorage with TTL
    */
   set<T>(key: string, value: T, ttlMinutes = 5): void {
-    if (!this.isValidKey(key)) {
-      console.warn('Cache key must be a non-empty string');
-      return;
-    }
+    // Early return for invalid keys
+    if (!key) return;
 
     const item: CacheItem<T> = {
       value,
@@ -43,17 +34,21 @@ class CacheService {
 
     // Memory cache
     if (this.memoryCache.size >= this.maxItems) {
-      // Remove oldest item if cache is full (LRU)
-      const oldestKey = this.memoryCache.keys().next().value;
-      this.memoryCache.delete(oldestKey);
+      const entries = Array.from(this.memoryCache.entries());
+      if (entries.length > 0) {
+        const [oldestKey] = entries[0];
+        this.memoryCache.delete(oldestKey);
+      }
     }
-    this.memoryCache.set(key, item);
 
-    // LocalStorage cache
-    try {
-      localStorage.setItem(key, JSON.stringify(item));
-    } catch (error) {
-      console.warn('LocalStorage write failed:', error);
+    // Only set if we have a valid key
+    if (typeof key === 'string') {
+      this.memoryCache.set(key, item);
+      try {
+        localStorage.setItem(key, JSON.stringify(item));
+      } catch (error) {
+        console.warn('LocalStorage write failed:', error);
+      }
     }
   }
 
@@ -61,34 +56,31 @@ class CacheService {
    * Get a value from cache (memory first, then localStorage)
    */
   get<T>(key: string): T | null {
-    if (!this.isValidKey(key)) {
-      console.warn('Cache key must be a non-empty string');
-      return null;
-    }
+    // Early return for invalid keys
+    if (!key) return null;
 
-    // Try memory cache first
-    const memoryItem = this.memoryCache.get(key);
-    if (memoryItem) {
-      if (this.isValid(memoryItem)) {
+    // Only proceed if we have a valid key
+    if (typeof key === 'string') {
+      // Try memory cache first
+      const memoryItem = this.memoryCache.get(key);
+      if (memoryItem && this.isValid(memoryItem)) {
         return memoryItem.value;
       }
-      this.memoryCache.delete(key);
-    }
 
-    // Try localStorage if not in memory
-    try {
-      const storedItem = localStorage.getItem(key);
-      if (storedItem) {
-        const item: CacheItem<T> = JSON.parse(storedItem);
-        if (this.isValid(item)) {
-          // Refresh memory cache
-          this.memoryCache.set(key, item);
-          return item.value;
+      // Try localStorage if not in memory
+      try {
+        const storedItem = localStorage.getItem(key);
+        if (storedItem) {
+          const item: CacheItem<T> = JSON.parse(storedItem);
+          if (this.isValid(item)) {
+            this.memoryCache.set(key, item);
+            return item.value;
+          }
+          localStorage.removeItem(key);
         }
-        localStorage.removeItem(key);
+      } catch (error) {
+        console.warn('LocalStorage read failed:', error);
       }
-    } catch (error) {
-      console.warn('LocalStorage read failed:', error);
     }
 
     return null;
@@ -98,16 +90,17 @@ class CacheService {
    * Remove item from both caches
    */
   remove(key: string): void {
-    if (!this.isValidKey(key)) {
-      console.warn('Cache key must be a non-empty string');
-      return;
-    }
-    
-    this.memoryCache.delete(key);
-    try {
-      localStorage.removeItem(key);
-    } catch (error) {
-      console.warn('LocalStorage remove failed:', error);
+    // Early return for invalid keys
+    if (!key) return;
+
+    // Only proceed if we have a valid key
+    if (typeof key === 'string') {
+      this.memoryCache.delete(key);
+      try {
+        localStorage.removeItem(key);
+      } catch (error) {
+        console.warn('LocalStorage remove failed:', error);
+      }
     }
   }
 
