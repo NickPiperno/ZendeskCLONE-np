@@ -23,6 +23,11 @@ class CacheService {
    * Set a value in both memory and localStorage with TTL
    */
   set<T>(key: string, value: T, ttlMinutes = 5): void {
+    if (!key) {
+      console.warn('Cache key cannot be undefined');
+      return;
+    }
+
     const item: CacheItem<T> = {
       value,
       timestamp: Date.now(),

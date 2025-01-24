@@ -11,7 +11,6 @@ import { Input } from "@/ui/components/input"
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue
