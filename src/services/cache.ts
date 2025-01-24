@@ -54,31 +54,33 @@ class CacheService {
    * Get a value from cache (memory first, then localStorage)
    */
   get<T>(key: string): T | null {
-    if (typeof key !== 'string' || key.length === 0) {
+    if (!key || typeof key !== 'string' || key.length === 0) {
       console.warn('Cache key must be a non-empty string');
       return null;
     }
 
+    const safeKey: string = key; // Explicitly tell TypeScript this is a string
+
     // Try memory cache first
-    const memoryItem = this.memoryCache.get(key);
+    const memoryItem = this.memoryCache.get(safeKey);
     if (memoryItem) {
       if (this.isValid(memoryItem)) {
         return memoryItem.value;
       }
-      this.memoryCache.delete(key);
+      this.memoryCache.delete(safeKey);
     }
 
     // Try localStorage if not in memory
     try {
-      const storedItem = localStorage.getItem(key);
+      const storedItem = localStorage.getItem(safeKey);
       if (storedItem) {
         const item: CacheItem<T> = JSON.parse(storedItem);
         if (this.isValid(item)) {
           // Refresh memory cache
-          this.memoryCache.set(key, item);
+          this.memoryCache.set(safeKey, item);
           return item.value;
         }
-        localStorage.removeItem(key);
+        localStorage.removeItem(safeKey);
       }
     } catch (error) {
       console.warn('LocalStorage read failed:', error);
