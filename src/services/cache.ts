@@ -23,8 +23,8 @@ class CacheService {
    * Set a value in both memory and localStorage with TTL
    */
   set<T>(key: string, value: T, ttlMinutes = 5): void {
-    if (!key) {
-      console.warn('Cache key cannot be undefined');
+    if (!key || typeof key !== 'string') {
+      console.warn('Cache key must be a non-empty string');
       return;
     }
 
