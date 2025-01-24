@@ -8,7 +8,15 @@ import {
 } from "@/ui/components/dialog"
 import { Button } from "@/ui/components/button"
 import { Input } from "@/ui/components/input"
-import { Select } from "@/ui/components/select"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/ui/components/select"
+import { Label } from "@/ui/components/label"
 import { TeamService } from '@/services/teams'
 import type { Team, TeamMember, TeamSchedule } from '@/modules/teams/types/team.types'
 
@@ -151,53 +159,48 @@ export function TeamScheduleDialog({ team, members, open, onOpenChange, onSchedu
           <div className="space-y-4 p-4 rounded-md border bg-muted/30">
             <h3 className="text-sm font-medium">Add Schedule</h3>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  Team Member
-                </label>
-                <Select
-                  value={selectedMember || ''}
-                  onValueChange={setSelectedMember}
-                >
-                  <option value="">Select member...</option>
-                  {members.map(member => (
-                    <option key={member.user_id} value={member.user_id}>
-                      {member.user.full_name}
-                    </option>
-                  ))}
+              <div className="space-y-2">
+                <Label>Team Member</Label>
+                <Select value={selectedMember || ''} onValueChange={setSelectedMember}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select member..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {members.map(member => (
+                      <SelectItem key={member.user_id} value={member.user_id}>
+                        {member.user.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  Day of Week
-                </label>
-                <Select
-                  value={dayOfWeek.toString()}
-                  onValueChange={(value) => setDayOfWeek(parseInt(value, 10))}
-                >
-                  {DAYS_OF_WEEK.map((day, index) => (
-                    <option key={index + 1} value={index + 1}>
-                      {day}
-                    </option>
-                  ))}
+              <div className="space-y-2">
+                <Label>Day of Week</Label>
+                <Select value={dayOfWeek.toString()} onValueChange={(value) => setDayOfWeek(parseInt(value, 10))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select day..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DAYS_OF_WEEK.map((day, index) => (
+                      <SelectItem key={index + 1} value={(index + 1).toString()}>
+                        {day}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  Start Time
-                </label>
+              <div className="space-y-2">
+                <Label>Start Time</Label>
                 <Input
                   type="time"
                   value={startTime}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStartTime(e.target.value)}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  End Time
-                </label>
+              <div className="space-y-2">
+                <Label>End Time</Label>
                 <Input
                   type="time"
                   value={endTime}

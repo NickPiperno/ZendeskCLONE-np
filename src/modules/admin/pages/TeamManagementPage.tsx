@@ -9,6 +9,7 @@ import { TeamSkillsDialog } from '@/modules/admin/components/teams/TeamSkillsDia
 import { TeamScheduleDialog } from '@/modules/admin/components/teams/TeamScheduleDialog'
 import { TeamMembersDialog } from '@/modules/admin/components/teams/TeamMembersDialog'
 import type { UserSkill, Skill } from '@/modules/teams/types/team.types'
+import { AdminPageHeader } from '../components/AdminPageHeader'
 
 /**
  * TeamManagementPage component
@@ -160,6 +161,11 @@ export function TeamManagementPage() {
 
   return (
     <div className="space-y-6">
+      <AdminPageHeader 
+        title="Team Management"
+        description="Create and manage teams, members, skills, and schedules"
+      />
+
       <div className="flex justify-end">
         <NewTeamDialog onTeamCreated={handleTeamCreated} />
       </div>

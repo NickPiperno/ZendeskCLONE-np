@@ -106,6 +106,8 @@ export function AgentDashboardPage() {
         filters={{
           status: selectedStatus === 'all' ? undefined : selectedStatus,
           priority: selectedPriority === 'all' ? undefined : selectedPriority,
+          assignedTo: user?.id,
+          assignmentStatus: 'assigned'
         }}
       />
     </div>

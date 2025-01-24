@@ -24,13 +24,24 @@ CREATE POLICY "Users can view their own tickets"
         AND NOT deleted
     );
 
-CREATE POLICY "Admins and agents can view all tickets"
+CREATE POLICY "Admins can view all tickets"
     ON public.tickets FOR SELECT
     USING (
         EXISTS (
             SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND (role = 'admin' OR role = 'agent')
+            WHERE id = auth.uid() AND role = 'admin'
         )
+        AND NOT deleted
+    );
+
+CREATE POLICY "Agents can view assigned tickets"
+    ON public.tickets FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND role = 'agent'
+        )
+        AND assigned_to = auth.uid()
         AND NOT deleted
     );
 
@@ -51,13 +62,24 @@ CREATE POLICY "Users can update their own tickets"
         AND NOT deleted
     );
 
-CREATE POLICY "Admins and agents can update any ticket"
+CREATE POLICY "Admins can update any ticket"
     ON public.tickets FOR UPDATE
     USING (
         EXISTS (
             SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND (role = 'admin' OR role = 'agent')
+            WHERE id = auth.uid() AND role = 'admin'
         )
+        AND NOT deleted
+    );
+
+CREATE POLICY "Agents can update assigned tickets"
+    ON public.tickets FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND role = 'agent'
+        )
+        AND assigned_to = auth.uid()
         AND NOT deleted
     );
 
@@ -81,10 +103,17 @@ BEGIN
         -- User owns the ticket
         auth.uid() = user_id
         OR
-        -- User is admin or agent
+        -- User is admin
         EXISTS (
             SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND (role = 'admin' OR role = 'agent')
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+        OR
+        -- Agent is assigned to the ticket
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND role = 'agent'
+            AND assigned_to = auth.uid()
         )
     );
 END;

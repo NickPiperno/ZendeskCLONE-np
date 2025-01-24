@@ -1,40 +1,32 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Button } from '@/ui/components/button'
-import { AuthService } from '@/services/auth'
-import { TeamManagementPage } from './TeamManagementPage'
-import { UserManagementPage } from './UserManagementPage'
-
-type Tab = 'teams' | 'users'
+import { useEffect } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '@/lib/auth/AuthContext'
+import { supabase } from '@/services/supabase'
 
 /**
- * AdminConsolePage component
- * Unified admin interface with tabs for team and user management
+ * AdminConsolePage.tsx
+ * Main admin interface for managing teams, users, and system settings.
  */
 export function AdminConsolePage() {
+  const { user } = useAuth()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<Tab>('teams')
-  const [loading, setLoading] = useState(true)
 
-  // Verify admin access
+  // Verify user is an admin
   useEffect(() => {
-    const checkAdminAccess = async () => {
-      const { profile } = await AuthService.getCurrentProfile()
-      if (!profile?.is_active || profile?.role !== 'admin') {
+    const checkRole = async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user?.id)
+        .single()
+
+      if (!profile || profile.role !== 'admin') {
         navigate('/dashboard')
       }
-      setLoading(false)
     }
-    checkAdminAccess()
-  }, [navigate])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    )
-  }
+    checkRole()
+  }, [user, navigate])
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -43,31 +35,61 @@ export function AdminConsolePage() {
         <p className="text-muted-foreground">Manage teams, users, and system settings</p>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex space-x-2 border-b">
-        <Button
-          variant={activeTab === 'teams' ? 'default' : 'ghost'}
-          className="rounded-none border-b-2 border-transparent px-4 py-2 -mb-[2px]"
-          onClick={() => setActiveTab('teams')}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Team Management */}
+        <Link
+          to="/admin/teams"
+          className="p-6 border rounded-lg bg-card hover:bg-card/80 transition-colors"
         >
-          Teams
-        </Button>
-        <Button
-          variant={activeTab === 'users' ? 'default' : 'ghost'}
-          className="rounded-none border-b-2 border-transparent px-4 py-2 -mb-[2px]"
-          onClick={() => setActiveTab('users')}
-        >
-          Users
-        </Button>
-      </div>
+          <h2 className="text-xl font-semibold mb-2">Team Management</h2>
+          <p className="text-muted-foreground">
+            Manage teams, members, skills, and schedules
+          </p>
+        </Link>
 
-      {/* Tab Content */}
-      <div className="mt-6">
-        {activeTab === 'teams' ? (
-          <TeamManagementPage />
-        ) : (
-          <UserManagementPage />
-        )}
+        {/* User Management */}
+        <Link
+          to="/admin/users"
+          className="p-6 border rounded-lg bg-card hover:bg-card/80 transition-colors"
+        >
+          <h2 className="text-xl font-semibold mb-2">User Management</h2>
+          <p className="text-muted-foreground">
+            Manage user accounts, roles, and permissions
+          </p>
+        </Link>
+
+        {/* System Metrics */}
+        <Link
+          to="/admin/metrics"
+          className="p-6 border rounded-lg bg-card hover:bg-card/80 transition-colors"
+        >
+          <h2 className="text-xl font-semibold mb-2">System Performance</h2>
+          <p className="text-muted-foreground">
+            Monitor system metrics and data usage
+          </p>
+        </Link>
+
+        {/* Audit Logs */}
+        <Link
+          to="/admin/audit-logs"
+          className="p-6 border rounded-lg bg-card hover:bg-card/80 transition-colors"
+        >
+          <h2 className="text-xl font-semibold mb-2">Audit Logs</h2>
+          <p className="text-muted-foreground">
+            Track and review system activity and changes
+          </p>
+        </Link>
+
+        {/* Settings */}
+        <Link
+          to="/admin/settings"
+          className="p-6 border rounded-lg bg-card hover:bg-card/80 transition-colors"
+        >
+          <h2 className="text-xl font-semibold mb-2">Settings</h2>
+          <p className="text-muted-foreground">
+            Configure system settings and preferences
+          </p>
+        </Link>
       </div>
     </div>
   )

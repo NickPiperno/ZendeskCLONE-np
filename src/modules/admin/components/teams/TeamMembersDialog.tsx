@@ -7,7 +7,15 @@ import {
   DialogDescription,
 } from "@/ui/components/dialog"
 import { Button } from "@/ui/components/button"
-import { Select } from "@/ui/components/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/ui/components/select"
+import { Label } from "@/ui/components/label"
+import { Checkbox } from "@/ui/components/checkbox"
 import { TeamService } from '@/services/teams'
 import { supabase } from '@/services/supabase'
 import type { Team, TeamMember } from '@/modules/teams/types/team.types'
@@ -39,11 +47,12 @@ export function TeamMembersDialog({ team, open, onOpenChange, onMembersUpdated }
       setLoading(true)
       setError(null)
 
-      // Get all active users
+      // Get all active agents and admins
       const { data: users, error: usersError } = await supabase
         .from('profiles')
         .select('*')
         .eq('is_active', true)
+        .in('role', ['agent', 'admin'])
 
       if (usersError) throw usersError
 
@@ -145,34 +154,31 @@ export function TeamMembersDialog({ team, open, onOpenChange, onMembersUpdated }
           <div className="space-y-4 p-4 rounded-md border bg-muted/30">
             <h3 className="text-sm font-medium">Add Member</h3>
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  User
-                </label>
-                <Select
-                  value={selectedUserId}
-                  onValueChange={setSelectedUserId}
-                >
-                  <option value="">Select user...</option>
-                  {availableUsers.map(user => (
-                    <option key={user.id} value={user.id}>
-                      {user.full_name} ({user.email})
-                    </option>
-                  ))}
+              <div className="space-y-2">
+                <Label>User</Label>
+                <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select user..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableUsers.map(user => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.full_name} ({user.email}) - {user.role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
 
               <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="isTeamLead"
                   checked={isTeamLead}
-                  onChange={(e) => setIsTeamLead(e.target.checked)}
-                  className="h-4 w-4"
+                  onCheckedChange={(checked) => setIsTeamLead(checked === true)}
                 />
-                <label htmlFor="isTeamLead" className="text-sm">
+                <Label htmlFor="isTeamLead" className="text-sm">
                   Assign as Team Lead
-                </label>
+                </Label>
               </div>
             </div>
 
@@ -196,7 +202,7 @@ export function TeamMembersDialog({ team, open, onOpenChange, onMembersUpdated }
                   <div>
                     <p className="font-medium">{member.user.full_name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {member.user.email}
+                      {member.user.email} - {member.user.role}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">

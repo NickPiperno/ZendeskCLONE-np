@@ -3,6 +3,7 @@ import { Button } from '@/ui/components/button'
 import { useAuth } from '@/lib/auth/AuthContext'
 import { supabase } from '@/services/supabase'
 import type { UserRole } from '@/modules/auth/types/user.types'
+import { AdminPageHeader } from '../components/AdminPageHeader'
 
 interface UserProfile {
   id: string
@@ -111,6 +112,11 @@ export function UserManagementPage() {
 
   return (
     <div className="space-y-6">
+      <AdminPageHeader 
+        title="User Management"
+        description="Manage user roles and account status"
+      />
+
       {error && (
         <div className="p-4 rounded-md bg-destructive/10 text-destructive">
           {error}

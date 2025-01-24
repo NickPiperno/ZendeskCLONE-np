@@ -3,6 +3,7 @@ import { Button } from '@/ui/components/button'
 import { useCreateTicket } from '../hooks/useCreateTicket'
 import type { TicketPriority } from '../types/ticket.types'
 import { TicketSkillsDialog } from './TicketSkillsDialog'
+import { useAuth } from '@/lib/auth/AuthContext'
 
 interface NewTicketFormProps {
   onSuccess?: () => void
@@ -15,6 +16,7 @@ interface NewTicketFormProps {
  */
 export function NewTicketForm({ onSuccess, onCancel }: NewTicketFormProps) {
   const { createTicket, loading, error } = useCreateTicket()
+  const { isAdmin } = useAuth()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<TicketPriority>('medium')
@@ -35,9 +37,13 @@ export function NewTicketForm({ onSuccess, onCancel }: NewTicketFormProps) {
     })
 
     if (result) {
-      // Open skills dialog after ticket is created
-      setNewTicketId(result.id)
-      setSkillsDialogOpen(true)
+      // Only open skills dialog for admins
+      if (isAdmin) {
+        setNewTicketId(result.id)
+        setSkillsDialogOpen(true)
+      } else {
+        onSuccess?.()
+      }
     }
   }
 
@@ -116,7 +122,7 @@ export function NewTicketForm({ onSuccess, onCancel }: NewTicketFormProps) {
         </div>
       </form>
 
-      {newTicketId && (
+      {isAdmin && newTicketId && (
         <TicketSkillsDialog
           ticketId={newTicketId}
           open={skillsDialogOpen}

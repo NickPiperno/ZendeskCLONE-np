@@ -28,12 +28,26 @@ CREATE POLICY "Users can view notes on their tickets"
         AND NOT ticket_notes.is_internal
     );
 
-CREATE POLICY "Admins and agents can view all notes"
+CREATE POLICY "Admins can view all notes"
     ON public.ticket_notes FOR SELECT
     USING (
         EXISTS (
             SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND (role = 'admin' OR role = 'agent')
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+        AND NOT ticket_notes.deleted
+    );
+
+CREATE POLICY "Agents can view notes on assigned tickets"
+    ON public.ticket_notes FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.tickets t
+            JOIN public.profiles p ON p.id = auth.uid()
+            WHERE t.id = ticket_notes.ticket_id
+            AND p.role = 'agent'
+            AND t.assigned_to = auth.uid()
+            AND NOT t.deleted
         )
         AND NOT ticket_notes.deleted
     );
@@ -51,12 +65,26 @@ CREATE POLICY "Users can create notes on their tickets"
         AND NOT is_internal
     );
 
-CREATE POLICY "Admins and agents can create any notes"
+CREATE POLICY "Admins can create any notes"
     ON public.ticket_notes FOR INSERT
     WITH CHECK (
         EXISTS (
             SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND (role = 'admin' OR role = 'agent')
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+        AND created_by = auth.uid()
+    );
+
+CREATE POLICY "Agents can create notes on assigned tickets"
+    ON public.ticket_notes FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.tickets t
+            JOIN public.profiles p ON p.id = auth.uid()
+            WHERE t.id = ticket_id
+            AND p.role = 'agent'
+            AND t.assigned_to = auth.uid()
+            AND NOT t.deleted
         )
         AND created_by = auth.uid()
     );
@@ -74,17 +102,31 @@ CREATE POLICY "Users can update their own notes"
         AND NOT is_internal
     );
 
-CREATE POLICY "Admins and agents can update any notes"
+CREATE POLICY "Admins can update any notes"
     ON public.ticket_notes FOR UPDATE
     USING (
         EXISTS (
             SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND (role = 'admin' OR role = 'agent')
+            WHERE id = auth.uid() AND role = 'admin'
         )
         AND NOT deleted
     );
 
--- Create soft delete function for notes
+CREATE POLICY "Agents can update notes on assigned tickets"
+    ON public.ticket_notes FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.tickets t
+            JOIN public.profiles p ON p.id = auth.uid()
+            WHERE t.id = ticket_notes.ticket_id
+            AND p.role = 'agent'
+            AND t.assigned_to = auth.uid()
+            AND NOT t.deleted
+        )
+        AND NOT deleted
+    );
+
+-- Update soft delete function for notes
 CREATE OR REPLACE FUNCTION public.soft_delete_ticket_note(note_id UUID)
 RETURNS VOID
 SECURITY DEFINER
@@ -100,10 +142,20 @@ BEGIN
         -- User owns the note
         created_by = auth.uid()
         OR
-        -- User is admin or agent
+        -- User is admin
         EXISTS (
             SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND (role = 'admin' OR role = 'agent')
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+        OR
+        -- Agent is assigned to the ticket
+        EXISTS (
+            SELECT 1 FROM public.tickets t
+            JOIN public.profiles p ON p.id = auth.uid()
+            WHERE t.id = ticket_notes.ticket_id
+            AND p.role = 'agent'
+            AND t.assigned_to = auth.uid()
+            AND NOT t.deleted
         )
     );
 END;

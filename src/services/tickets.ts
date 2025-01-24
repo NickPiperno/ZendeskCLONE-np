@@ -369,10 +369,16 @@ export class TicketService {
    */
   static async findBestAgentMatch(ticketId: string): Promise<AgentMatch[] | TicketError> {
     try {
+      console.log('Finding best agent match for ticket:', ticketId)
       const { data, error } = await supabase
-        .rpc('find_best_agent_match', { ticket_id: ticketId })
+        .rpc('find_best_agent_match', { p_ticket_id: ticketId })
 
-      if (error) throw error
+      if (error) {
+        console.error('Database error finding agent match:', error)
+        throw error
+      }
+
+      console.log('Found potential agent matches:', data)
       return data
     } catch (error) {
       console.error('Error finding agent match:', error)
@@ -389,10 +395,16 @@ export class TicketService {
    */
   static async autoAssignTicket(ticketId: string): Promise<string | TicketError> {
     try {
+      console.log('Starting auto-assignment for ticket:', ticketId)
       const { data, error } = await supabase
-        .rpc('auto_assign_ticket', { ticket_id: ticketId })
+        .rpc('auto_assign_ticket', { p_ticket_id: ticketId })
 
-      if (error) throw error
+      if (error) {
+        console.error('Database error during auto-assignment:', error)
+        throw error
+      }
+      
+      console.log('Auto-assignment result:', data)
       return data
     } catch (error) {
       console.error('Error auto-assigning ticket:', error)
@@ -429,10 +441,38 @@ export class TicketService {
    */
   static async reassignTicket(ticketId: string): Promise<{ data: string | null, error: string | null }> {
     try {
+      console.log('Starting ticket reassignment for ticket:', ticketId)
+      
+      // First check if ticket has required skills
+      const skills = await TicketService.getTicketSkills(ticketId)
+      if ('code' in skills) {
+        console.error('Error getting ticket skills:', skills)
+        throw new Error('Failed to get ticket skills')
+      }
+      console.log('Ticket required skills:', skills)
+      
+      // Find potential agent matches - returns UUID directly now
+      const bestMatch = await TicketService.findBestAgentMatch(ticketId)
+      console.log('Best agent match:', bestMatch)
+      
+      if (!bestMatch || typeof bestMatch === 'object') {
+        console.error('No suitable agent found or error:', bestMatch)
+        return { 
+          data: null, 
+          error: 'No suitable agent found. Check required skills and agent availability.' 
+        }
+      }
+
+      // At this point bestMatch is a UUID string, proceed with assignment
       const { data, error } = await supabase
         .rpc('auto_assign_ticket', { p_ticket_id: ticketId })
 
-      if (error) throw error
+      if (error) {
+        console.error('Database error during reassignment:', error)
+        throw error
+      }
+
+      console.log('Reassignment result:', data)
 
       // If an agent was assigned, return their ID
       if (data) {
@@ -448,7 +488,7 @@ export class TicketService {
       console.error('Error reassigning ticket:', error)
       return {
         data: null,
-        error: 'Failed to reassign ticket'
+        error: error instanceof Error ? error.message : 'Failed to reassign ticket'
       }
     }
   }

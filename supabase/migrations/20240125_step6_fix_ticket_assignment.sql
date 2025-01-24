@@ -8,11 +8,7 @@ DROP FUNCTION IF EXISTS public.find_best_agent_match(UUID);
 
 -- Function to find best agent match for a ticket
 CREATE OR REPLACE FUNCTION public.find_best_agent_match(p_ticket_id UUID)
-RETURNS TABLE (
-    agent_id UUID,
-    match_score NUMERIC,
-    reason TEXT
-)
+RETURNS UUID
 SECURITY DEFINER
 SET search_path = public
 LANGUAGE plpgsql
@@ -21,112 +17,148 @@ DECLARE
     ticket_priority ticket_priority;
     current_time TIME;
     current_day INTEGER;
+    v_log_message TEXT;
+    best_agent_id UUID;
 BEGIN
     -- Get ticket priority
     SELECT t.priority INTO ticket_priority
     FROM tickets t
     WHERE t.id = p_ticket_id;
+    
+    RAISE NOTICE 'Starting agent match for ticket % (Priority: %)', p_ticket_id, ticket_priority;
 
     -- Get current time for schedule checking
     SELECT CURRENT_TIME INTO current_time;
-    -- Get current day (1-7, Monday = 1)
     SELECT EXTRACT(ISODOW FROM CURRENT_DATE) INTO current_day;
+    
+    RAISE NOTICE 'Current time: %, day: %', current_time, current_day;
 
-    RETURN QUERY
-    WITH required_skills AS (
-        -- Get required skills for the ticket
+    -- Log required skills
+    WITH required_skills_log AS (
         SELECT 
-            ts.skill_id,
-            ts.required_proficiency
+            array_agg(s.name) as skill_names,
+            array_agg(ts.required_proficiency) as proficiency_levels
         FROM ticket_skills ts
+        JOIN skills s ON s.id = ts.skill_id
         WHERE ts.ticket_id = p_ticket_id
+    )
+    SELECT format('Required skills: %s (proficiency: %s)', 
+           skill_names, proficiency_levels)
+    INTO v_log_message
+    FROM required_skills_log;
+    RAISE NOTICE '%', v_log_message;
+
+    -- Find best agent match
+    WITH required_skills AS (
+        SELECT skill_id, required_proficiency
+        FROM ticket_skills
+        WHERE ticket_id = p_ticket_id
     ),
     available_agents AS (
-        -- Get agents who are:
-        -- 1. Active
-        -- 2. Currently scheduled to work
-        -- 3. Have the required skills
-        SELECT DISTINCT
-            p.id as agent_id,
-            -- Base score starts at 100
-            100::NUMERIC as base_score
+        SELECT DISTINCT p.id as agent_id
         FROM profiles p
         JOIN team_members tm ON tm.user_id = p.id
         JOIN team_schedules ts ON ts.user_id = p.id
         WHERE 
             p.role = 'agent'
             AND p.is_active = true
-            -- Check if agent is scheduled to work now
             AND ts.day_of_week = current_day
             AND current_time BETWEEN ts.start_time AND ts.end_time
     ),
     skill_scores AS (
-        -- Calculate skill match scores
         SELECT 
             aa.agent_id,
             COALESCE(
                 AVG(
                     CASE 
-                        -- Perfect match or higher proficiency = 100%
                         WHEN us.proficiency_level >= rs.required_proficiency THEN 100
-                        -- Partial match = percentage of required proficiency
                         ELSE (us.proficiency_level::NUMERIC / rs.required_proficiency::NUMERIC) * 100
                     END
                 ),
-                0  -- No skills = 0 score
+                0
             ) as skill_score
         FROM available_agents aa
-        LEFT JOIN required_skills rs ON true  -- Cross join with required skills
-        LEFT JOIN user_skills us ON us.user_id = aa.agent_id AND us.skill_id = rs.skill_id
+        CROSS JOIN required_skills rs
+        LEFT JOIN user_skills us ON 
+            us.user_id = aa.agent_id AND 
+            us.skill_id = rs.skill_id
         GROUP BY aa.agent_id
     ),
     workload_scores AS (
-        -- Calculate workload scores (inverse - lower is better)
         SELECT 
             aa.agent_id,
             CASE 
-                WHEN COUNT(t.id) = 0 THEN 100  -- No tickets = perfect score
-                ELSE 100 - (COUNT(t.id) * 10)  -- -10 points per active ticket
+                WHEN COUNT(t.id) = 0 THEN 100
+                ELSE GREATEST(0, 100 - (COUNT(t.id) * 10))
             END as workload_score
         FROM available_agents aa
-        LEFT JOIN tickets t ON t.assigned_to = aa.agent_id 
-            AND t.status IN ('open', 'in_progress')
+        LEFT JOIN tickets t ON 
+            t.assigned_to = aa.agent_id AND 
+            t.status IN ('open', 'in_progress')
         GROUP BY aa.agent_id
     )
-    -- Combine all scores with priority weighting
-    SELECT 
-        aa.agent_id,
-        (
-            -- Skill score weighted at 50%
-            (ss.skill_score * 0.5) +
-            -- Workload score weighted at 30-50% based on priority
-            (ws.workload_score * 
-                CASE ticket_priority
-                    WHEN 'urgent' THEN 0.3  -- For urgent tickets, prioritize skills over workload
-                    WHEN 'high' THEN 0.35
-                    WHEN 'medium' THEN 0.4
-                    WHEN 'low' THEN 0.5     -- For low priority, distribute more evenly
-                END
-            )
-        ) as match_score,
-        CASE 
-            WHEN ss.skill_score < 60 THEN 'Low skill match'
-            WHEN ws.workload_score < 60 THEN 'High current workload'
-            ELSE 'Good match based on skills and workload'
-        END as reason
-    FROM available_agents aa
-    JOIN skill_scores ss ON ss.agent_id = aa.agent_id
-    JOIN workload_scores ws ON ws.agent_id = aa.agent_id
-    WHERE 
-        -- Ensure minimum skill score of 60%
-        ss.skill_score >= 60
-        -- Ensure agent has capacity (no more than 5 active tickets)
-        AND ws.workload_score >= 50
-    ORDER BY match_score DESC;
+    SELECT agent_id INTO best_agent_id
+    FROM (
+        SELECT 
+            aa.agent_id,
+            (ss.skill_score * 0.6 + ws.workload_score * 0.4) as final_score
+        FROM available_agents aa
+        JOIN skill_scores ss ON ss.agent_id = aa.agent_id
+        JOIN workload_scores ws ON ws.agent_id = aa.agent_id
+        WHERE 
+            ss.skill_score >= 60
+            AND ws.workload_score >= 50
+        ORDER BY final_score DESC
+        LIMIT 1
+    ) final_scores;
+
+    -- Log the result
+    IF best_agent_id IS NULL THEN
+        WITH agent_stats AS (
+            SELECT 
+                COUNT(*) FILTER (WHERE role = 'agent') as total_agents,
+                COUNT(*) FILTER (WHERE role = 'agent' AND is_active = true) as active_agents,
+                COUNT(*) FILTER (
+                    WHERE role = 'agent' 
+                    AND is_active = true 
+                    AND EXISTS (
+                        SELECT 1 
+                        FROM team_schedules ts 
+                        WHERE ts.user_id = profiles.id
+                        AND ts.day_of_week = current_day
+                        AND current_time BETWEEN ts.start_time AND ts.end_time
+                    )
+                ) as scheduled_agents,
+                COUNT(*) FILTER (
+                    WHERE role = 'agent' 
+                    AND is_active = true 
+                    AND EXISTS (
+                        SELECT 1 
+                        FROM user_skills us
+                        JOIN ticket_skills ts ON ts.skill_id = us.skill_id
+                        WHERE us.user_id = profiles.id
+                        AND ts.ticket_id = p_ticket_id
+                    )
+                ) as agents_with_skills
+            FROM profiles
+        )
+        SELECT format(
+            'No match found. Stats: Total agents: %s, Active: %s, Scheduled: %s, With skills: %s',
+            total_agents, active_agents, scheduled_agents, agents_with_skills
+        )
+        INTO v_log_message
+        FROM agent_stats;
+        
+        RAISE NOTICE '%', v_log_message;
+    ELSE
+        RAISE NOTICE 'Found matching agent: %', best_agent_id;
+    END IF;
+
+    RETURN best_agent_id;
 END;
 $$;
 
--- Function to automatically assign ticket to best matching agent
+-- Function to auto-assign ticket
 CREATE OR REPLACE FUNCTION public.auto_assign_ticket(p_ticket_id UUID)
 RETURNS UUID
 SECURITY DEFINER
@@ -134,24 +166,25 @@ SET search_path = public
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    selected_agent_id UUID;
+    v_agent_id UUID;
 BEGIN
-    -- Find best matching agent
-    SELECT agent_id INTO selected_agent_id
-    FROM public.find_best_agent_match(p_ticket_id)
-    LIMIT 1;
-
-    -- If an agent was found, assign the ticket
-    IF selected_agent_id IS NOT NULL THEN
-        UPDATE public.tickets t
+    -- Find the best agent match
+    SELECT public.find_best_agent_match(p_ticket_id) INTO v_agent_id;
+    
+    IF v_agent_id IS NOT NULL THEN
+        UPDATE tickets 
         SET 
-            assigned_to = selected_agent_id,
-            status = 'in_progress',
+            assigned_to = v_agent_id,
+            status = 'open',
             updated_at = NOW()
-        WHERE t.id = p_ticket_id;
+        WHERE id = p_ticket_id;
+        
+        RAISE NOTICE 'Ticket % assigned to agent %', p_ticket_id, v_agent_id;
+    ELSE
+        RAISE NOTICE 'No suitable agent found for ticket %', p_ticket_id;
     END IF;
 
-    RETURN selected_agent_id;
+    RETURN v_agent_id;
 END;
 $$;
 
@@ -211,8 +244,6 @@ CREATE TRIGGER ticket_skills_auto_assign_trigger
     FOR EACH ROW
     EXECUTE FUNCTION public.try_reassign_on_skills_change();
 
--- Grant permissions
+-- Grant execute permissions
 GRANT EXECUTE ON FUNCTION public.find_best_agent_match(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.auto_assign_ticket(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.try_auto_assign_ticket() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.try_reassign_on_skills_change() TO authenticated; 
+GRANT EXECUTE ON FUNCTION public.auto_assign_ticket(UUID) TO authenticated; 

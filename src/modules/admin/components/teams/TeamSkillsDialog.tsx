@@ -7,9 +7,17 @@ import {
   DialogDescription,
 } from "@/ui/components/dialog"
 import { Button } from "@/ui/components/button"
-import { Select } from "@/ui/components/select"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/ui/components/select"
 import { TeamService } from '@/services/teams'
 import type { Team, TeamMember, Skill, UserSkill } from '@/modules/teams/types/team.types'
+import { Label } from '@/ui/components/label'
 
 interface TeamSkillsDialogProps {
   team: Team
@@ -138,76 +146,89 @@ export function TeamSkillsDialog({ team, onSkillsUpdated, open, onOpenChange }: 
         <div className="space-y-4 p-4 rounded-md border bg-muted/30">
           <h3 className="text-sm font-medium">Add Skill</h3>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">
-                Team Member
-              </label>
-              <Select
-                value={selectedMember || ''}
-                onValueChange={setSelectedMember}
-              >
-                <option value="">Select member...</option>
-                {members.map(member => (
-                  <option key={member.user_id} value={member.user_id}>
-                    {member.user.full_name}
-                  </option>
-                ))}
+            <div className="space-y-2">
+              <Label>Team Member</Label>
+              <Select value={selectedMember} onValueChange={setSelectedMember}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {members.map(member => (
+                    <SelectItem key={member.user_id} value={member.user_id}>
+                      {member.user.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">
-                Skill
-              </label>
-              <Select
-                value={selectedSkill || ''}
-                onValueChange={setSelectedSkill}
-              >
-                <option value="">Select skill...</option>
-                <optgroup label="Technical Skills">
-                  {skills.filter(s => s.category === 'technical').map(skill => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.name}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Product Skills">
-                  {skills.filter(s => s.category === 'product').map(skill => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.name}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Language Skills">
-                  {skills.filter(s => s.category === 'language').map(skill => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.name}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Soft Skills">
-                  {skills.filter(s => s.category === 'soft_skill').map(skill => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.name}
-                    </option>
-                  ))}
-                </optgroup>
+            <div className="space-y-2">
+              <Label>Skill</Label>
+              <Select value={selectedSkill} onValueChange={setSelectedSkill}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select skill..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {/* Technical Skills */}
+                  <SelectGroup>
+                    <SelectItem value="_group_technical" disabled className="font-semibold !text-foreground !bg-muted py-2 px-3 -mx-1 my-1 rounded-sm hover:!bg-muted">
+                      Technical Skills
+                    </SelectItem>
+                    {skills.filter(s => s.category === 'technical').map(skill => (
+                      <SelectItem key={skill.id} value={skill.id}>
+                        {skill.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  {/* Product Skills */}
+                  <SelectGroup>
+                    <SelectItem value="_group_product" disabled className="font-semibold !text-foreground !bg-muted py-2 px-3 -mx-1 my-1 rounded-sm hover:!bg-muted">
+                      Product Skills
+                    </SelectItem>
+                    {skills.filter(s => s.category === 'product').map(skill => (
+                      <SelectItem key={skill.id} value={skill.id}>
+                        {skill.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  {/* Language Skills */}
+                  <SelectGroup>
+                    <SelectItem value="_group_language" disabled className="font-semibold !text-foreground !bg-muted py-2 px-3 -mx-1 my-1 rounded-sm hover:!bg-muted">
+                      Language Skills
+                    </SelectItem>
+                    {skills.filter(s => s.category === 'language').map(skill => (
+                      <SelectItem key={skill.id} value={skill.id}>
+                        {skill.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  {/* Soft Skills */}
+                  <SelectGroup>
+                    <SelectItem value="_group_soft_skill" disabled className="font-semibold !text-foreground !bg-muted py-2 px-3 -mx-1 my-1 rounded-sm hover:!bg-muted">
+                      Soft Skills
+                    </SelectItem>
+                    {skills.filter(s => s.category === 'soft_skill').map(skill => (
+                      <SelectItem key={skill.id} value={skill.id}>
+                        {skill.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
               </Select>
             </div>
           </div>
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">
-              Proficiency Level (1-5)
-            </label>
-            <Select
-              value={proficiencyLevel?.toString() || ''}
-              onValueChange={(value) => setProficiencyLevel(parseInt(value, 10))}
-            >
-              <option value="">Select level...</option>
-              {[1, 2, 3, 4, 5].map(level => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
+          <div className="space-y-2">
+            <Label>Proficiency Level (1-5)</Label>
+            <Select value={proficiencyLevel.toString()} onValueChange={(value) => setProficiencyLevel(parseInt(value, 10))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select level..." />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4, 5].map(level => (
+                  <SelectItem key={level} value={level.toString()}>
+                    {level}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
           <Button

@@ -7,7 +7,7 @@ import type { Ticket, TicketStatus, TicketPriority } from '../types/ticket.types
 import { Checkbox } from '@/ui/components/checkbox'
 import { TeamService } from '@/services/teams'
 import { supabase } from '@/services/supabase'
-import { Select } from '@/ui/components/select'
+import { useAuth } from '@/lib/auth/AuthContext'
 
 type SkillCategory = 'technical' | 'product' | 'language' | 'soft_skill'
 
@@ -23,8 +23,6 @@ interface TicketSkill {
   skill_id: string
   required_proficiency: number
 }
-
-type FilterKey = 'status' | 'priority' | 'assignedTo' | 'assignmentStatus'
 
 interface TicketListProps {
   filters?: {
@@ -46,15 +44,15 @@ interface AgentInfo {
  * Handles loading and error states
  * Supports bulk actions on selected tickets
  */
-export function TicketList({ filters: initialFilters }: TicketListProps) {
-  const [filters, setFilters] = useState(initialFilters || {})
-  
-  // Update useTickets hook to use the current filters state
+export function TicketList({ filters }: TicketListProps) {
+  const { user, profile } = useAuth()
+  const [isAdmin, setIsAdmin] = useState(false)
   const { tickets, loading, error, refetch } = useTickets({
     ...filters,
-    assignedTo: filters.assignmentStatus === 'unassigned' ? null :
-                filters.assignmentStatus === 'assigned' ? (filters.assignedTo || true) :
-                undefined
+    assignedTo: filters?.assignmentStatus === 'unassigned' ? null :
+                filters?.assignmentStatus === 'assigned' ? (filters.assignedTo || true) :
+                filters?.assignedTo === 'any' ? undefined :
+                filters?.assignedTo
   })
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -65,7 +63,24 @@ export function TicketList({ filters: initialFilters }: TicketListProps) {
   const [skills, setSkills] = useState<Skill[]>([])
   const [agents, setAgents] = useState<Record<string, AgentInfo>>({})
   const [reassignLoading, setReassignLoading] = useState<string | null>(null)
-  const [allAgents, setAllAgents] = useState<AgentInfo[]>([])
+
+  const isRegularUser = profile?.role === 'user'
+
+  useEffect(() => {
+    // Check if user is admin
+    const checkRole = async () => {
+      if (!user) return
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      setIsAdmin(profile?.role === 'admin')
+    }
+
+    checkRole()
+  }, [user])
 
   useEffect(() => {
     // Load all skills once
@@ -122,27 +137,6 @@ export function TicketList({ filters: initialFilters }: TicketListProps) {
       loadAgents()
     }
   }, [tickets])
-
-  // Load all agents for the filter dropdown
-  useEffect(() => {
-    const loadAllAgents = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .eq('role', 'agent')
-        .eq('is_active', true)
-        .order('full_name')
-
-      if (error) {
-        console.error('Error loading agents:', error)
-        return
-      }
-
-      setAllAgents(data)
-    }
-
-    loadAllAgents()
-  }, [])
 
   const handleSelectAll = () => {
     if (selectedTickets.size === tickets.length) {
@@ -215,117 +209,8 @@ export function TicketList({ filters: initialFilters }: TicketListProps) {
     setReassignLoading(null)
   }
 
-  const handleFilterChange = (key: FilterKey, value: string | null) => {
-    setFilters(prev => {
-      const newFilters = { ...prev }
-      if (value === null) {
-        delete newFilters[key]
-      } else {
-        newFilters[key] = value as any // Safe because we control the keys and values
-      }
-
-      // Clear assignedTo when changing assignment status to unassigned
-      if (key === 'assignmentStatus' && value === 'unassigned') {
-        delete newFilters.assignedTo
-      }
-
-      return newFilters
-    })
-  }
-
-  const handleClearFilters = () => {
-    setFilters({})
-  }
-
   return (
     <>
-      {/* Filters - Always show these */}
-      <div className="mb-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">Filters</h3>
-          {(filters.status || filters.priority || filters.assignmentStatus || filters.assignedTo) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearFilters}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Clear Filters
-            </Button>
-          )}
-        </div>
-        <div className="grid grid-cols-4 gap-4">
-          {/* Assignment Status Filter */}
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">
-              Assignment Status
-            </label>
-            <Select
-              value={filters.assignmentStatus || 'all'}
-              onValueChange={(value) => handleFilterChange('assignmentStatus', value)}
-            >
-              <option value="all">All Tickets</option>
-              <option value="assigned">Assigned Only</option>
-              <option value="unassigned">Unassigned Only</option>
-            </Select>
-          </div>
-
-          {/* Assigned Agent Filter */}
-          {(filters.assignmentStatus === 'all' || filters.assignmentStatus === 'assigned') && (
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">
-                Assigned To
-              </label>
-              <Select
-                value={filters.assignedTo || ''}
-                onValueChange={(value) => handleFilterChange('assignedTo', value || null)}
-              >
-                <option value="">Any Agent</option>
-                {allAgents.map(agent => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.full_name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-
-          {/* Status Filter */}
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">
-              Status
-            </label>
-            <Select
-              value={filters.status || ''}
-              onValueChange={(value) => handleFilterChange('status', value || null)}
-            >
-              <option value="">Any Status</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In Progress</option>
-              <option value="resolved">Resolved</option>
-              <option value="closed">Closed</option>
-            </Select>
-          </div>
-
-          {/* Priority Filter */}
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">
-              Priority
-            </label>
-            <Select
-              value={filters.priority || ''}
-              onValueChange={(value) => handleFilterChange('priority', value || null)}
-            >
-              <option value="">Any Priority</option>
-              <option value="urgent">Urgent</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </Select>
-          </div>
-        </div>
-      </div>
-
       {/* Loading State */}
       {loading && (
         <div className="flex items-center justify-center p-8">
@@ -362,8 +247,8 @@ export function TicketList({ filters: initialFilters }: TicketListProps) {
       {/* Ticket List */}
       {!loading && !error && tickets.length > 0 && (
         <>
-          {/* Bulk Actions */}
-          {selectedTickets.size > 0 && (
+          {/* Bulk Actions - Hide for regular users */}
+          {!isRegularUser && selectedTickets.size > 0 && (
             <div className="bg-muted/50 p-4 rounded-lg mb-4 flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
                 {selectedTickets.size} ticket{selectedTickets.size === 1 ? '' : 's'} selected
@@ -400,15 +285,17 @@ export function TicketList({ filters: initialFilters }: TicketListProps) {
           <div className="space-y-4">
             {/* Header */}
             <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
-              <Checkbox
-                checked={selectedTickets.size === tickets.length}
-                onCheckedChange={handleSelectAll}
-              />
+              {!isRegularUser && (
+                <Checkbox
+                  checked={selectedTickets.size === tickets.length}
+                  onCheckedChange={handleSelectAll}
+                />
+              )}
               <span className="flex-1 font-medium">Title</span>
               <span className="w-28 text-center">Priority</span>
               <span className="w-28 text-center">Status</span>
               <span className="w-32">Created</span>
-              <span className="w-48">Assigned To</span>
+              {!isRegularUser && <span className="w-48">Assigned To</span>}
               <span className="w-40 text-right">Actions</span>
             </div>
 
@@ -418,11 +305,14 @@ export function TicketList({ filters: initialFilters }: TicketListProps) {
                 key={ticket.id}
                 className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm flex items-center gap-4"
               >
-                <Checkbox
-                  checked={selectedTickets.has(ticket.id)}
-                  onCheckedChange={() => handleSelectTicket(ticket.id)}
-                />
+                {!isRegularUser && (
+                  <Checkbox
+                    checked={selectedTickets.has(ticket.id)}
+                    onCheckedChange={() => handleSelectTicket(ticket.id)}
+                  />
+                )}
                 <div className="flex-1">
+                  <span className="text-xs text-muted-foreground">#{ticket.id.split('-')[0]}</span>
                   <h3 className="font-semibold">{ticket.title}</h3>
                   <p className="text-sm text-muted-foreground mt-1">{ticket.description}</p>
                   {/* Display skills */}
@@ -474,16 +364,18 @@ export function TicketList({ filters: initialFilters }: TicketListProps) {
                 <span className="w-32 text-sm text-muted-foreground">
                   {new Date(ticket.created_at).toLocaleDateString()}
                 </span>
-                <span className="w-48 text-sm">
-                  {ticket.assigned_to ? (
-                    <div className="flex flex-col">
-                      <span className="font-medium">{agents[ticket.assigned_to]?.full_name || 'Loading...'}</span>
-                      <span className="text-xs text-muted-foreground">{agents[ticket.assigned_to]?.email}</span>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">Unassigned</span>
-                  )}
-                </span>
+                {!isRegularUser && (
+                  <span className="w-48 text-sm">
+                    {ticket.assigned_to ? (
+                      <div className="flex flex-col">
+                        <span className="font-medium">{agents[ticket.assigned_to]?.full_name || 'Loading...'}</span>
+                        <span className="text-xs text-muted-foreground">{agents[ticket.assigned_to]?.email}</span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">Unassigned</span>
+                    )}
+                  </span>
+                )}
                 <div className="w-40 flex justify-end gap-2">
                   <Button 
                     variant="outline" 
@@ -492,39 +384,43 @@ export function TicketList({ filters: initialFilters }: TicketListProps) {
                   >
                     Edit
                   </Button>
-                  <Button 
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleReassign(ticket.id)}
-                    disabled={reassignLoading === ticket.id}
-                    title="Try to find a suitable agent based on required skills and availability"
-                  >
-                    {reassignLoading === ticket.id ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                    ) : (
-                      <svg 
-                        className="h-4 w-4" 
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round" 
-                          strokeWidth={2} 
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-                        />
-                      </svg>
-                    )}
-                  </Button>
-                  <Button 
-                    variant="destructive" 
-                    size="sm"
-                    onClick={() => handleDelete(ticket.id)}
-                    disabled={deleteLoading === ticket.id}
-                  >
-                    {deleteLoading === ticket.id ? 'Deleting...' : 'Delete'}
-                  </Button>
+                  {isAdmin && (
+                    <Button 
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleReassign(ticket.id)}
+                      disabled={reassignLoading === ticket.id}
+                      title="Try to find a suitable agent based on required skills and availability"
+                    >
+                      {reassignLoading === ticket.id ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                      ) : (
+                        <svg 
+                          className="h-4 w-4" 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={2} 
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                          />
+                        </svg>
+                      )}
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      onClick={() => handleDelete(ticket.id)}
+                      disabled={deleteLoading === ticket.id}
+                    >
+                      {deleteLoading === ticket.id ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
