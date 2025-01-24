@@ -24,14 +24,17 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     storageKey: 'zendesk_auth',
     storage: {
       getItem: (key: string): Promise<string | null> => {
+        if (!key) return Promise.resolve(null);
         const cached = cache.get<string>(key);
         return Promise.resolve(cached);
       },
       setItem: (key: string, value: string): Promise<void> => {
+        if (!key) return Promise.resolve();
         cache.set(key, value, 60); // Cache auth for 1 hour
         return Promise.resolve();
       },
       removeItem: (key: string): Promise<void> => {
+        if (!key) return Promise.resolve();
         cache.remove(key);
         return Promise.resolve();
       }
