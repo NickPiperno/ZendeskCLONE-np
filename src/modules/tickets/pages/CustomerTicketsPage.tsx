@@ -28,6 +28,7 @@ export function CustomerTicketsPage() {
   })
 
   const handleTicketSelect = (ticketId: string) => {
+    console.log('Selected ticket ID:', ticketId)
     setSelectedTicketId(ticketId)
     setActiveTab('timeline')
   }

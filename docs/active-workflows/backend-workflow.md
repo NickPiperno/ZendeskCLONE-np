@@ -1,83 +1,89 @@
-# Backend Workflow
+# Backend Development Workflow
 
-## Project State
-Project Phase: Phase 6 - Customer-Facing Features
-Backend-Focused
+## Current Phase: Implementation
 
-## Task Management
-- [x] Identify current backend tasks from docs/living/checklists or relevant phase file
-- [x] Copy task details to "Primary Feature" section
-- [x] Break down into "Component Features" if needed
+### Phase 1: Architecture Planning ✅
+- [x] Data flow and relationships
+- [x] API/route handler structure
+- [x] Type definitions and Zod schemas
+- [x] Real-time requirements
+- [x] Test specifications
 
----
+### Phase 2: Database Schema Updates ✅
+- [x] Create migration files
+- [x] Add new tables and relationships
+- [x] Update views and functions
+- [x] Apply RLS policies
+- [x] Test migrations
 
-## Primary Feature
-Name: Customer Portal Foundation
-Description: Setting up secure customer ticket endpoints and Knowledge Base infrastructure
+### Phase 3: TypeScript Layer ✅
+- [x] Define interfaces and types
+- [x] Create Zod schemas
+- [x] Set up Supabase type generation
+- [x] Document type system
 
-### Component Features
-- [x] Secure Customer Ticket Endpoints
-  - [x] Design RLS policies for customer ticket access
-  - [x] Create customer-specific views
-  - [x] Implement ticket query endpoints
-  - [x] Add data validation and security checks
+### Phase 4: API and Security Layer ✅
+- [x] Update RLS policies
+  - [x] Thread visibility rules
+  - [x] Message creation permissions
+  - [x] AI interaction permissions
+- [x] Implement API Classes
+  - [x] ThreadAPI class implementation
+  - [x] ThreadService class for database operations
+  - [x] WebSocketService for Supabase Realtime
+- [x] Add validation
+  - [x] Input validation with Zod
+  - [x] Message type validation
+  - [x] AI context validation
+- [x] Supabase Integration
+  - [x] Direct database operations
+  - [x] Realtime subscriptions
+  - [x] RLS policy testing
 
-- [x] Knowledge Base Infrastructure
-  - [x] Create Knowledge Base table schema
-  - [x] Set up full-text search configuration
-  - [x] Implement search query optimization
-  - [x] Add article categorization system
+### Phase 5: UI Integration 🚧
+- [ ] Component Integration
+    - [ ] Thread List Component
+      - [ ] Implement skeuomorphic card design with subtle shadows
+      - [ ] Add real-time updates via Supabase subscription
+      - [ ] Include loading states and transitions
+    - [ ] Thread View Component
+      - [ ] Design message bubbles with Modern Skeuomorphic style
+      - [ ] Add AI status indicators with subtle visual feedback
+      - [ ] Implement real-time message updates
+    - [ ] Message Composer
+      - [ ] Create tactile input experience
+      - [ ] Add visual feedback for message sending
+      - [ ] Implement optimistic updates
 
-Next Steps:
-1. Create TypeScript types for new database schema
-2. Implement Supabase client queries for KB search
-3. Set up API endpoints for customer ticket timeline
-4. Add integration tests for new endpoints
+- [x] Data Layer Integration
+    - [x] Set up React Query
+      - [x] Configure query client with proper defaults
+      - [x] Implement query invalidation strategy
+      - [x] Add error boundaries and fallbacks
+    - [x] Supabase Integration
+      - [x] Initialize realtime subscriptions
+      - [x] Handle connection states
+      - [x] Implement retry logic
+    - [x] State Management
+      - [x] Define React Query cache structure
+      - [x] Implement optimistic updates
+      - [x] Handle concurrent modifications
 
----
+- [ ] Accessibility & Performance
+    - [ ] Implement ARIA attributes
+      - [ ] Add proper roles and labels
+      - [ ] Ensure keyboard navigation
+      - [ ] Test with screen readers
+    - [ ] Performance Optimization
+      - [ ] Implement proper suspense boundaries
+      - [ ] Add loading skeletons
+      - [ ] Optimize re-renders
+    - [ ] Error Handling
+      - [ ] Add error boundaries
+      - [ ] Implement retry mechanisms
+      - [ ] Show user-friendly error states
 
-## Progress Checklist
-
-### Understanding Phase
-- [x] Documentation Review
-    - [x] Tech stack guidelines (`tech-stack.md`, `tech-stack-rules.md`)
-    - [x] Existing services and utils (`services.ts`, `database.ts`, `feature/*/utils`)
-    - [x] Data models (`lib/types`)
-    - [x] Integration points (endpoints, auth boundaries)
-    - [x] Real-time features (presence, typing, notifications)
-- Notes: Completed foundation layer with KB and customer ticket access
-
-### Planning Phase
-- [x] Architecture
-    - [x] Data flow and relationships
-    - [x] API/route handler structure
-    - [x] Type definitions and Zod schemas
-    - [x] Real-time requirements
-    - [x] Test specifications (per `test-rules.md`)
-    - [x] PAUSE, Check in with user
-- Notes: Foundation layer complete, ready for TypeScript integration
-
-### Implementation Phase
-- [ ] Setup
-    - [ ] Verify data types and shapes
-    - [ ] Confirm UI integration points
-    - [ ] Review file structure requirements
-- Notes: Need to create TypeScript types for new tables and views
-
-- [ ] Development
-    - [ ] Create route handlers/server actions
-    - [ ] Implement database integration
-    - [ ] Add business logic
-    - [ ] Implement data validation
-    - [ ] Add real-time features if needed
-    - [ ] Write and maintain tests
-- Notes: Database schema complete, need to implement TypeScript layer
-
-- [ ] Integration
-    - [ ] Connect with UI components
-    - [ ] Document API endpoints
-    - [ ] Configure state management
-- Notes: Ready to begin frontend integration
+Notes: Completed React Query setup with proper types and error handling. Ready to begin component implementation.
 
 ### Verification Phase
 - [ ] Quality Check
@@ -99,4 +105,5 @@ Key decisions and learnings:
 1. ✅ Implemented enhanced RLS policies for customer access
 2. ✅ Created KB infrastructure with full-text search
 3. ✅ Added customer-specific views and helper functions
-4. Next: Focus on TypeScript integration and testing
+4. ✅ Transitioned from Next.js to Vite + React architecture
+5. Next: Focus on React Query integration and testing

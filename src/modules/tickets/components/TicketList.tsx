@@ -5,17 +5,12 @@ import { useState, useEffect } from 'react'
 import { EditTicketDialog } from './EditTicketDialog'
 import type { Ticket, TicketStatus, TicketPriority } from '../types/ticket.types'
 import { Checkbox } from '@/ui/components/checkbox'
-import { TeamService } from '@/services/teams'
 import { supabase } from '@/services/supabase'
 import { useAuth } from '@/lib/auth/AuthContext'
-
-type SkillCategory = 'technical' | 'product' | 'language' | 'soft_skill'
-
-interface Skill {
-  id: string
-  name: string
-  category: SkillCategory
-}
+import { ThreadList } from './thread/ThreadList'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ui/components/dialog'
+import type { Skill, SkillCategory } from '@/modules/teams/types/team.types'
+import { TeamService } from '@/services/teams'
 
 interface TicketSkill {
   id: string
@@ -39,6 +34,228 @@ interface AgentInfo {
   email: string
 }
 
+interface TicketCardProps {
+  ticket: Ticket
+  onEdit?: (ticket: Ticket) => void
+  onDelete?: (ticketId: string) => void
+  onReassign?: (ticketId: string) => void
+  isAdmin?: boolean
+  isRegularUser?: boolean
+  agents: Record<string, AgentInfo>
+  ticketSkills?: TicketSkill[]
+  skills?: Skill[]
+  selected?: boolean
+  onSelect?: (ticketId: string) => void
+  reassignLoading?: string | null
+}
+
+interface ThreadDialogProps {
+  ticketId: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+function ThreadDialog({ ticketId, open, onOpenChange }: ThreadDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Thread Management</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto">
+          <ThreadList ticketId={ticketId} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function TicketCard({ 
+  ticket, 
+  onEdit, 
+  onDelete, 
+  onReassign, 
+  isAdmin,
+  isRegularUser = false,
+  agents,
+  ticketSkills = [],
+  skills = [],
+  selected = false,
+  onSelect,
+  reassignLoading
+}: TicketCardProps) {
+  const [showThreads, setShowThreads] = useState(false)
+  const assignedAgent = ticket.assigned_to ? agents[ticket.assigned_to] : null
+
+  return (
+    <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
+      <div className="flex items-center gap-4">
+        {!isRegularUser && onSelect && (
+          <div className="w-6">
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => onSelect(ticket.id)}
+            />
+          </div>
+        )}
+        
+        {/* Title and Description Column */}
+        <div className="w-[400px] min-w-0">
+          <span className="text-xs text-muted-foreground">#{ticket.id.split('-')[0]}</span>
+          <h3 className="font-semibold truncate">{ticket.title}</h3>
+          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{ticket.description}</p>
+
+          {/* Skills */}
+          {ticketSkills?.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {ticketSkills.map((skill) => {
+                const skillInfo = skills.find(s => s.id === skill.skill_id)
+                const categoryColors: Record<SkillCategory, string> = {
+                  technical: 'bg-blue-100 text-blue-800',
+                  product: 'bg-purple-100 text-purple-800',
+                  language: 'bg-green-100 text-green-800',
+                  soft_skill: 'bg-amber-100 text-amber-800'
+                }
+                const colorClass = skillInfo ? categoryColors[skillInfo.category] : 'bg-muted'
+                
+                return (
+                  <span
+                    key={skill.id}
+                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${colorClass}`}
+                    title={`${skillInfo?.category.replace('_', ' ').toUpperCase()} - Required Proficiency: ${skill.required_proficiency}`}
+                  >
+                    {skillInfo?.name} ({skill.required_proficiency})
+                  </span>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Priority Column */}
+        <div className="w-24 text-center">
+          <span className={`inline-flex items-center px-2 py-1 rounded text-xs
+            ${ticket.priority === 'urgent' ? 'bg-red-100 text-red-800' : ''}
+            ${ticket.priority === 'high' ? 'bg-orange-100 text-orange-800' : ''}
+            ${ticket.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : ''}
+            ${ticket.priority === 'low' ? 'bg-green-100 text-green-800' : ''}
+          `}>
+            {ticket.priority}
+          </span>
+        </div>
+
+        {/* Status Column */}
+        <div className="w-24 text-center">
+          <span className={`inline-flex items-center px-2 py-1 rounded text-xs
+            ${ticket.status === 'open' ? 'bg-blue-100 text-blue-800' : ''}
+            ${ticket.status === 'in_progress' ? 'bg-purple-100 text-purple-800' : ''}
+            ${ticket.status === 'resolved' ? 'bg-green-100 text-green-800' : ''}
+            ${ticket.status === 'closed' ? 'bg-gray-100 text-gray-800' : ''}
+          `}>
+            {ticket.status.replace('_', ' ')}
+          </span>
+        </div>
+
+        {/* Created Date Column */}
+        <div className="w-28">
+          {new Date(ticket.created_at).toLocaleDateString()}
+        </div>
+
+        {/* Assignment Column */}
+        {!isRegularUser && (
+          <div className="w-40">
+            {assignedAgent ? (
+              <div className="flex flex-col">
+                <span className="font-medium">{assignedAgent.full_name}</span>
+                <span className="text-xs truncate">{assignedAgent.email}</span>
+              </div>
+            ) : (
+              'Unassigned'
+            )}
+          </div>
+        )}
+
+        {/* Actions Column */}
+        <div className="flex-1 flex justify-end gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowThreads(true)}
+          >
+            Manage Threads
+          </Button>
+          {onEdit && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => onEdit(ticket)}
+            >
+              Edit
+            </Button>
+          )}
+          {isAdmin && onReassign && (
+            <Button 
+              variant="ghost"
+              size="sm"
+              onClick={() => onReassign(ticket.id)}
+              title="Try to find a suitable agent based on required skills and availability"
+              disabled={reassignLoading === ticket.id}
+            >
+              {reassignLoading === ticket.id ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                <svg 
+                  className="h-4 w-4" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                  />
+                </svg>
+              )}
+            </Button>
+          )}
+          {isAdmin && onDelete && (
+            <Button 
+              variant="ghost"
+              size="sm"
+              onClick={() => onDelete(ticket.id)}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              title="Soft delete this ticket"
+            >
+              <svg 
+                className="h-4 w-4" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" 
+                />
+              </svg>
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Thread Dialog */}
+      <ThreadDialog 
+        ticketId={ticket.id}
+        open={showThreads}
+        onOpenChange={setShowThreads}
+      />
+    </div>
+  )
+}
+
 /**
  * Displays a list of tickets with their status and priority
  * Handles loading and error states
@@ -54,7 +271,6 @@ export function TicketList({ filters }: TicketListProps) {
                 filters?.assignedTo === 'any' ? undefined :
                 filters?.assignedTo
   })
-  const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null)
   const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set())
@@ -84,7 +300,11 @@ export function TicketList({ filters }: TicketListProps) {
 
   useEffect(() => {
     // Load all skills once
-    TeamService.getSkills().then(setSkills)
+    TeamService.getSkills().then(result => {
+      if (Array.isArray(result)) {
+        setSkills(result)
+      }
+    })
   }, [])
 
   useEffect(() => {
@@ -180,27 +400,35 @@ export function TicketList({ filters }: TicketListProps) {
       return
     }
 
-    setDeleteLoading(id)
     setDeleteError(null)
-
     const { error } = await TicketService.deleteTicket(id)
     
     if (error) {
       setDeleteError(error)
     } else {
-      refetch()
+      // Remove from selected tickets if it was selected
+      if (selectedTickets.has(id)) {
+        const newSelected = new Set(selectedTickets)
+        newSelected.delete(id)
+        setSelectedTickets(newSelected)
+      }
+      // Refresh the ticket list
+      await refetch()
     }
-    
-    setDeleteLoading(null)
   }
 
   const handleReassign = async (ticketId: string) => {
     setReassignLoading(ticketId)
 
+    // Check if we have skills loaded for this ticket
+    const ticketSkillsList = ticketSkills[ticketId]
+    if (!ticketSkillsList?.length) {
+      console.log('No skills found for ticket:', ticketId)
+    }
+
     const { error } = await TicketService.reassignTicket(ticketId)
     
     if (error) {
-      // Show error in a toast or alert
       alert(error)
     } else {
       refetch()
@@ -209,224 +437,127 @@ export function TicketList({ filters }: TicketListProps) {
     setReassignLoading(null)
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 rounded-md bg-destructive/10 text-destructive">
+        <p>Error: {error}</p>
+        <Button variant="outline" className="mt-2" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
+    )
+  }
+
+  if (!tickets?.length) {
+    return (
+      <div className="text-center p-8 text-muted-foreground">
+        <p>No tickets found</p>
+      </div>
+    )
+  }
+
   return (
     <>
-      {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      )}
-
-      {/* Error States */}
-      {error && (
-        <div className="p-4 rounded-md bg-destructive/10 text-destructive">
-          <p>Error: {error}</p>
-          <Button variant="outline" className="mt-2" onClick={() => window.location.reload()}>
-            Retry
-          </Button>
-        </div>
-      )}
-
+      {/* Error Message */}
       {deleteError && (
-        <div className="p-4 rounded-md bg-destructive/10 text-destructive">
-          <p>Error deleting ticket: {deleteError}</p>
-          <Button variant="outline" className="mt-2" onClick={() => setDeleteError(null)}>
+        <div className="p-4 mb-4 rounded-md bg-destructive/10 text-destructive">
+          <p>Failed to delete ticket: {deleteError}</p>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="mt-2"
+            onClick={() => setDeleteError(null)}
+          >
             Dismiss
           </Button>
         </div>
       )}
 
-      {/* No Tickets State */}
-      {!loading && !error && tickets.length === 0 && (
-        <div className="text-center p-8 text-muted-foreground">
-          <p>No tickets found</p>
+      {/* Bulk Actions - Hide for regular users */}
+      {!isRegularUser && selectedTickets.size > 0 && (
+        <div className="bg-muted/50 p-4 rounded-lg mb-4 flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">
+            {selectedTickets.size} ticket{selectedTickets.size === 1 ? '' : 's'} selected
+          </span>
+          <div className="space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleBulkStatusUpdate('in_progress')}
+              disabled={bulkActionLoading}
+            >
+              Mark In Progress
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleBulkStatusUpdate('resolved')}
+              disabled={bulkActionLoading}
+            >
+              Mark Resolved
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleBulkStatusUpdate('closed')}
+              disabled={bulkActionLoading}
+            >
+              Mark Closed
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Ticket List */}
-      {!loading && !error && tickets.length > 0 && (
-        <>
-          {/* Bulk Actions - Hide for regular users */}
-          {!isRegularUser && selectedTickets.size > 0 && (
-            <div className="bg-muted/50 p-4 rounded-lg mb-4 flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                {selectedTickets.size} ticket{selectedTickets.size === 1 ? '' : 's'} selected
-              </span>
-              <div className="space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleBulkStatusUpdate('in_progress')}
-                  disabled={bulkActionLoading}
-                >
-                  Mark In Progress
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleBulkStatusUpdate('resolved')}
-                  disabled={bulkActionLoading}
-                >
-                  Mark Resolved
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleBulkStatusUpdate('closed')}
-                  disabled={bulkActionLoading}
-                >
-                  Mark Closed
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
-              {!isRegularUser && (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="p-4 rounded-lg bg-muted/30">
+          <div className="flex items-center gap-4">
+            {!isRegularUser && (
+              <div className="w-6">
                 <Checkbox
                   checked={selectedTickets.size === tickets.length}
                   onCheckedChange={handleSelectAll}
                 />
-              )}
-              <span className="flex-1 font-medium">Title</span>
-              <span className="w-28 text-center">Priority</span>
-              <span className="w-28 text-center">Status</span>
-              <span className="w-32">Created</span>
-              {!isRegularUser && <span className="w-48">Assigned To</span>}
-              <span className="w-40 text-right">Actions</span>
-            </div>
-
-            {/* Tickets */}
-            {tickets.map((ticket) => (
-              <div
-                key={ticket.id}
-                className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm flex items-center gap-4"
-              >
-                {!isRegularUser && (
-                  <Checkbox
-                    checked={selectedTickets.has(ticket.id)}
-                    onCheckedChange={() => handleSelectTicket(ticket.id)}
-                  />
-                )}
-                <div className="flex-1">
-                  <span className="text-xs text-muted-foreground">#{ticket.id.split('-')[0]}</span>
-                  <h3 className="font-semibold">{ticket.title}</h3>
-                  <p className="text-sm text-muted-foreground mt-1">{ticket.description}</p>
-                  {/* Display skills */}
-                  {ticketSkills[ticket.id]?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {ticketSkills[ticket.id].map((skill) => {
-                        const skillInfo = skills.find(s => s.id === skill.skill_id)
-                        const categoryColors: Record<SkillCategory, string> = {
-                          technical: 'bg-blue-100 text-blue-800',
-                          product: 'bg-purple-100 text-purple-800',
-                          language: 'bg-green-100 text-green-800',
-                          soft_skill: 'bg-amber-100 text-amber-800'
-                        }
-                        const colorClass = skillInfo ? categoryColors[skillInfo.category] : 'bg-muted'
-                        
-                        return (
-                          <span
-                            key={skill.id}
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${colorClass}`}
-                            title={`${skillInfo?.category.replace('_', ' ').toUpperCase()} - Required Proficiency: ${skill.required_proficiency}`}
-                          >
-                            {skillInfo?.name} ({skill.required_proficiency})
-                          </span>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-                <span className="w-28 text-center">
-                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium
-                    ${ticket.priority === 'urgent' ? 'bg-red-100 text-red-800' :
-                      ticket.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                      ticket.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-green-100 text-green-800'}`}
-                  >
-                    {ticket.priority}
-                  </span>
-                </span>
-                <span className="w-28 text-center">
-                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium
-                    ${ticket.status === 'open' ? 'bg-blue-100 text-blue-800' :
-                      ticket.status === 'in_progress' ? 'bg-purple-100 text-purple-800' :
-                      ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'}`}
-                  >
-                    {ticket.status}
-                  </span>
-                </span>
-                <span className="w-32 text-sm text-muted-foreground">
-                  {new Date(ticket.created_at).toLocaleDateString()}
-                </span>
-                {!isRegularUser && (
-                  <span className="w-48 text-sm">
-                    {ticket.assigned_to ? (
-                      <div className="flex flex-col">
-                        <span className="font-medium">{agents[ticket.assigned_to]?.full_name || 'Loading...'}</span>
-                        <span className="text-xs text-muted-foreground">{agents[ticket.assigned_to]?.email}</span>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">Unassigned</span>
-                    )}
-                  </span>
-                )}
-                <div className="w-40 flex justify-end gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setEditingTicket(ticket)}
-                  >
-                    Edit
-                  </Button>
-                  {isAdmin && (
-                    <Button 
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleReassign(ticket.id)}
-                      disabled={reassignLoading === ticket.id}
-                      title="Try to find a suitable agent based on required skills and availability"
-                    >
-                      {reassignLoading === ticket.id ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                      ) : (
-                        <svg 
-                          className="h-4 w-4" 
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round" 
-                            strokeWidth={2} 
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-                          />
-                        </svg>
-                      )}
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button 
-                      variant="destructive" 
-                      size="sm"
-                      onClick={() => handleDelete(ticket.id)}
-                      disabled={deleteLoading === ticket.id}
-                    >
-                      {deleteLoading === ticket.id ? 'Deleting...' : 'Delete'}
-                    </Button>
-                  )}
-                </div>
               </div>
-            ))}
+            )}
+            <div className="w-[400px] font-medium">Title</div>
+            <div className="w-24 text-center">Priority</div>
+            <div className="w-24 text-center">Status</div>
+            <div className="w-28">Created</div>
+            {!isRegularUser && <div className="w-40">Assigned To</div>}
+            <div className="flex-1 flex justify-end">Actions</div>
           </div>
-        </>
-      )}
+        </div>
+
+        {/* Tickets */}
+        {tickets.map((ticket) => (
+          <TicketCard
+            key={ticket.id}
+            ticket={ticket}
+            onEdit={(ticket) => {
+              setEditingTicket(ticket)
+            }}
+            onDelete={handleDelete}
+            onReassign={handleReassign}
+            isAdmin={isAdmin}
+            isRegularUser={isRegularUser}
+            agents={agents}
+            ticketSkills={ticketSkills[ticket.id]}
+            skills={skills}
+            selected={selectedTickets.has(ticket.id)}
+            onSelect={handleSelectTicket}
+            reassignLoading={reassignLoading}
+          />
+        ))}
+      </div>
 
       {/* Edit Dialog */}
       {editingTicket && (

@@ -189,6 +189,7 @@ export const TeamService = {
       .select('*')
       .eq('team_id', teamId)
       .eq('is_active', true)
+      .eq('deleted', false)  // Only get non-deleted schedules
 
     if (schedulesError) throw schedulesError
     if (!schedules?.length) return []
@@ -211,7 +212,10 @@ export const TeamService = {
   async addTeamSchedule(schedule: TeamScheduleInsert) {
     const { data, error } = await supabase
       .from('team_schedules')
-      .insert(schedule)
+      .insert({
+        ...schedule,
+        deleted: false
+      })
       .select()
       .single()
 
@@ -224,6 +228,7 @@ export const TeamService = {
       .from('team_schedules')
       .update(updates)
       .eq('id', id)
+      .eq('deleted', false)  // Only update non-deleted schedules
       .select()
       .single()
 
@@ -233,9 +238,7 @@ export const TeamService = {
 
   async removeTeamSchedule(id: string) {
     const { error } = await supabase
-      .from('team_schedules')
-      .delete()
-      .eq('id', id)
+      .rpc('soft_delete_team_schedule', { schedule_id: id })
 
     if (error) throw error
   },

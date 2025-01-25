@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { Ticket, TicketInsert, TicketUpdate } from '@/modules/tickets/types/ticket.types'
+import { PostgrestError } from '@supabase/supabase-js'
 
 // Error codes for better error tracking and handling
 export const TicketErrorCodes = {
@@ -30,7 +31,7 @@ interface TicketSkill {
 }
 
 interface AgentMatch {
-  agent_id: string
+  agent_id: string | null
   match_score: number
   reason: string
 }
@@ -70,7 +71,7 @@ export class TicketService {
   /**
    * Create a new ticket
    */
-  static async createTicket(ticket: Omit<TicketInsert, 'created_at' | 'updated_at' | 'user_id'>) {
+  static async createTicket(ticket: Omit<TicketInsert, 'created_at' | 'updated_at'>) {
     try {
       // Validate user session
       const { data: { user }, error: sessionError } = await supabase.auth.getUser()
@@ -88,6 +89,13 @@ export class TicketService {
         }
       }
 
+      // Get user profile to check role
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
       // Validate ticket data
       const validationErrors = this.validateTicket(ticket)
       if (validationErrors.length > 0) {
@@ -104,7 +112,8 @@ export class TicketService {
         .from('tickets')
         .insert([{
           ...ticket,
-          user_id: user.id,
+          // If admin is creating ticket and user_id is provided, use that, otherwise use current user's ID
+          user_id: profile?.role === 'admin' && ticket.user_id ? ticket.user_id : user.id,
           status: ticket.status || 'open',
           priority: ticket.priority || 'medium'
         }])
@@ -163,6 +172,7 @@ export class TicketService {
         .from('tickets')
         .select('*')
         .order('created_at', { ascending: false })
+        .eq('deleted', false)  // Only show non-deleted tickets
 
       // Handle assignment filters
       if (options?.assignedTo === null) {
@@ -367,26 +377,23 @@ export class TicketService {
   /**
    * Find best agent match for a ticket
    */
-  static async findBestAgentMatch(ticketId: string): Promise<AgentMatch[] | TicketError> {
+  static async findBestAgentMatch(ticketId: string): Promise<AgentMatch | null> {
     try {
-      console.log('Finding best agent match for ticket:', ticketId)
       const { data, error } = await supabase
         .rpc('find_best_agent_match', { p_ticket_id: ticketId })
 
       if (error) {
-        console.error('Database error finding agent match:', error)
-        throw error
+        console.error('Database error in find_best_agent_match:', error.message)
+        return null
       }
 
-      console.log('Found potential agent matches:', data)
-      return data
+      // Log the response for debugging
+      console.log('Database response:', data)
+      
+      return data as AgentMatch
     } catch (error) {
-      console.error('Error finding agent match:', error)
-      return {
-        code: TicketErrorCodes.ASSIGNMENT_ERROR,
-        message: 'Failed to find agent match',
-        details: error
-      }
+      console.error('Error in findBestAgentMatch:', error instanceof PostgrestError ? error.message : 'Unknown error')
+      return null
     }
   }
 
@@ -437,55 +444,143 @@ export class TicketService {
   }
 
   /**
+   * Get all agents and their skills
+   */
+  static async getAllAgentSkills() {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_all_user_skills')
+
+      if (error) {
+        console.error('Error getting agent skills:', error)
+        return {
+          code: TicketErrorCodes.SKILL_ERROR,
+          message: 'Failed to get agent skills',
+          details: error
+        }
+      }
+
+      return { data, error: null }
+    } catch (error) {
+      console.error('Error getting agent skills:', error)
+      return {
+        data: null,
+        error: 'Failed to get agent skills'
+      }
+    }
+  }
+
+  /**
+   * Get agent schedules for current day
+   */
+  static async getAgentSchedules() {
+    try {
+      const currentDay = new Date().getDay() // 0-6, where 0 is Sunday
+      const { data, error } = await supabase
+        .from('team_schedules')
+        .select('*')
+        .eq('day_of_week', currentDay)
+
+      if (error) {
+        console.error('Error getting agent schedules:', error)
+        return {
+          code: TicketErrorCodes.FETCH_ERROR,
+          message: 'Failed to get agent schedules',
+          details: error
+        }
+      }
+
+      return { data, error: null }
+    } catch (error) {
+      console.error('Error getting agent schedules:', error)
+      return {
+        data: null,
+        error: 'Failed to get agent schedules'
+      }
+    }
+  }
+
+  /**
    * Manually trigger re-assignment of a ticket
    */
   static async reassignTicket(ticketId: string): Promise<{ data: string | null, error: string | null }> {
     try {
-      console.log('Starting ticket reassignment for ticket:', ticketId)
+      console.log('=== Starting ticket reassignment process ===')
+      console.log('Ticket ID:', ticketId)
       
       // First check if ticket has required skills
+      console.log('Step 1: Fetching ticket skills...')
       const skills = await TicketService.getTicketSkills(ticketId)
       if ('code' in skills) {
         console.error('Error getting ticket skills:', skills)
         throw new Error('Failed to get ticket skills')
       }
-      console.log('Ticket required skills:', skills)
+      console.log('Required skills found:', JSON.stringify(skills, null, 2))
       
-      // Find potential agent matches - returns UUID directly now
+      // Get all agent skills for debugging
+      console.log('Step 2: Fetching all agent skills...')
+      const agentSkills = await TicketService.getAllAgentSkills()
+      if (agentSkills.error) {
+        console.error('Error getting agent skills:', agentSkills.error)
+      } else {
+        console.log('Available agents and their skills:', JSON.stringify(agentSkills.data, null, 2))
+      }
+
+      // Get agent schedules for debugging
+      console.log('Step 3: Fetching agent schedules...')
+      const schedules = await TicketService.getAgentSchedules()
+      if (schedules.error) {
+        console.error('Error getting agent schedules:', schedules.error)
+      } else {
+        const currentTime = new Date().toLocaleTimeString()
+        console.log('Current time:', currentTime)
+        console.log('Current day:', new Date().getDay())
+        console.log('Agent schedules:', JSON.stringify(schedules.data, null, 2))
+      }
+      
+      // Find potential agent match
+      console.log('Step 4: Finding best agent match...')
       const bestMatch = await TicketService.findBestAgentMatch(ticketId)
-      console.log('Best agent match:', bestMatch)
+      console.log('Best agent match result:', JSON.stringify(bestMatch, null, 2))
       
-      if (!bestMatch || typeof bestMatch === 'object') {
-        console.error('No suitable agent found or error:', bestMatch)
+      // Check if we got an error or no match
+      if (!bestMatch || !bestMatch.agent_id) {
+        console.log('No suitable agent found:', bestMatch?.reason || 'Unknown reason')
         return { 
           data: null, 
-          error: 'No suitable agent found. Check required skills and agent availability.' 
+          error: bestMatch?.reason || 'No suitable agent found. Check required skills and agent availability.' 
         }
       }
 
-      // At this point bestMatch is a UUID string, proceed with assignment
+      // At this point bestMatch must contain a valid agent_id
+      // We have a match, proceed with auto-assignment
+      console.log('Step 5: Proceeding with auto-assignment...')
+      console.log('Calling auto_assign_ticket with ID:', ticketId)
       const { data, error } = await supabase
         .rpc('auto_assign_ticket', { p_ticket_id: ticketId })
 
       if (error) {
-        console.error('Database error during reassignment:', error)
+        console.error('Database error during auto-assignment:', error)
         throw error
       }
 
-      console.log('Reassignment result:', data)
+      console.log('Auto-assignment result:', data)
 
       // If an agent was assigned, return their ID
       if (data) {
+        console.log('=== Ticket reassignment successful ===')
         return { data, error: null }
       }
 
-      // If no agent was found
+      // If no agent was found (shouldn't happen at this point, but just in case)
+      console.log('=== Ticket reassignment failed - no agent assigned ===')
       return { 
         data: null, 
-        error: 'No suitable agent found. Check required skills and agent availability.' 
+        error: 'Failed to assign ticket to matched agent.' 
       }
     } catch (error) {
-      console.error('Error reassigning ticket:', error)
+      console.error('=== Ticket reassignment failed with error ===')
+      console.error('Error details:', error)
       return {
         data: null,
         error: error instanceof Error ? error.message : 'Failed to reassign ticket'

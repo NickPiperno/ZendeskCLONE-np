@@ -1,4 +1,8 @@
--- Drop functions first (they might reference the table)
+-- Drop triggers first
+DROP TRIGGER IF EXISTS ticket_skills_auto_assign_trigger ON public.ticket_skills;
+DROP TRIGGER IF EXISTS ticket_auto_assign_trigger ON public.tickets;
+
+-- Then drop functions
 DROP FUNCTION IF EXISTS public.try_reassign_on_skills_change();
 DROP FUNCTION IF EXISTS public.try_auto_assign_ticket();
 DROP FUNCTION IF EXISTS public.auto_assign_ticket(UUID);
@@ -14,10 +18,6 @@ CREATE TABLE IF NOT EXISTS public.ticket_skills (
     required_proficiency INTEGER CHECK (required_proficiency BETWEEN 1 AND 5),
     UNIQUE(ticket_id, skill_id)
 );
-
--- Now we can safely drop triggers if they exist
-DROP TRIGGER IF EXISTS ticket_skills_auto_assign_trigger ON public.ticket_skills;
-DROP TRIGGER IF EXISTS ticket_auto_assign_trigger ON public.tickets;
 
 -- Enable RLS
 ALTER TABLE public.ticket_skills ENABLE ROW LEVEL SECURITY;

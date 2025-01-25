@@ -1,0 +1,14 @@
+name,color
+bug,#FF4D4D
+question,#2196F3
+documentation,#9C27B0
+low-priority,#607D8B
+enhancement,#00BCD4
+security,#F44336
+ui-ux,#E91E63
+performance,#795548
+backend,#3F51B5
+frontend,#009688
+database,#673AB7
+testing,#8BC34A
+deployment,#FF5722 

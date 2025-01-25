@@ -45,8 +45,7 @@ export function TicketSkillsDialog({ ticketId, open, onOpenChange, onSkillsUpdat
 
   // Form state
   const [selectedSkill, setSelectedSkill] = useState<string>('')
-  const [requiredProficiency, setRequiredProficiency] = useState<number>(1)
-  const [submitting, setSubmitting] = useState(false)
+  const [proficiency, setProficiency] = useState<number>(1)
 
   useEffect(() => {
     if (open) {
@@ -81,49 +80,40 @@ export function TicketSkillsDialog({ ticketId, open, onOpenChange, onSkillsUpdat
   const handleAddSkill = async () => {
     if (!selectedSkill) return
 
-    setSubmitting(true)
+    setLoading(true)
     setError(null)
 
-    try {
-      const result = await TicketService.addTicketSkills(ticketId, [{
-        skillId: selectedSkill,
-        requiredProficiency
-      }])
+    const result = await TicketService.addTicketSkills(ticketId, [{
+      skillId: selectedSkill,
+      requiredProficiency: proficiency
+    }])
 
-      if ('code' in result) {
-        throw new Error(result.message)
-      }
-
-      await loadData()
-      onSkillsUpdated?.()
-
-      // Reset form
+    if (Array.isArray(result)) {
+      setTicketSkills(prev => [...prev, ...result])
       setSelectedSkill('')
-      setRequiredProficiency(1)
-    } catch (err) {
-      console.error('Error adding skill:', err)
-      setError('Failed to add skill')
-    } finally {
-      setSubmitting(false)
+      setProficiency(1)
+      onSkillsUpdated?.()
+    } else {
+      setError(result.message)
     }
+
+    setLoading(false)
   }
 
   const handleRemoveSkill = async (skillId: string) => {
-    setSubmitting(true)
+    setLoading(true)
     setError(null)
 
-    try {
-      const { error } = await TicketService.removeTicketSkill(skillId)
-      if (error) throw new Error(error)
+    const { error } = await TicketService.removeTicketSkill(skillId)
 
-      await loadData()
+    if (error) {
+      setError(error)
+    } else {
+      setTicketSkills(prev => prev.filter(s => s.id !== skillId))
       onSkillsUpdated?.()
-    } catch (err) {
-      console.error('Error removing skill:', err)
-      setError('Failed to remove skill')
-    } finally {
-      setSubmitting(false)
     }
+
+    setLoading(false)
   }
 
   return (
@@ -151,12 +141,12 @@ export function TicketSkillsDialog({ ticketId, open, onOpenChange, onSkillsUpdat
         {/* Add Skill Form */}
         <div className="space-y-4 p-4 rounded-md border bg-muted/30">
           <h3 className="text-sm font-medium">Add Required Skill</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-[1fr,auto,auto] gap-2 items-end">
             <div className="space-y-2">
               <Label>Skill</Label>
               <Select value={selectedSkill} onValueChange={setSelectedSkill}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select skill..." />
+                  <SelectValue placeholder="Select a skill..." />
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px]">
                   {/* Technical Skills */}
@@ -164,70 +154,91 @@ export function TicketSkillsDialog({ ticketId, open, onOpenChange, onSkillsUpdat
                     <SelectItem value="_group_technical" disabled className="font-semibold !text-foreground !bg-muted py-2 px-3 -mx-1 my-1 rounded-sm hover:!bg-muted">
                       Technical Skills
                     </SelectItem>
-                    {skills.filter(s => s.category === 'technical').map(skill => (
-                      <SelectItem key={skill.id} value={skill.id}>
-                        {skill.name}
-                      </SelectItem>
-                    ))}
+                    {skills
+                      .filter(s => s.category === 'technical')
+                      .filter(skill => !ticketSkills.some(ts => ts.skill_id === skill.id))
+                      .map(skill => (
+                        <SelectItem key={skill.id} value={skill.id}>
+                          {skill.name}
+                        </SelectItem>
+                      ))
+                    }
                   </SelectGroup>
                   {/* Product Skills */}
                   <SelectGroup>
                     <SelectItem value="_group_product" disabled className="font-semibold !text-foreground !bg-muted py-2 px-3 -mx-1 my-1 rounded-sm hover:!bg-muted">
                       Product Skills
                     </SelectItem>
-                    {skills.filter(s => s.category === 'product').map(skill => (
-                      <SelectItem key={skill.id} value={skill.id}>
-                        {skill.name}
-                      </SelectItem>
-                    ))}
+                    {skills
+                      .filter(s => s.category === 'product')
+                      .filter(skill => !ticketSkills.some(ts => ts.skill_id === skill.id))
+                      .map(skill => (
+                        <SelectItem key={skill.id} value={skill.id}>
+                          {skill.name}
+                        </SelectItem>
+                      ))
+                    }
                   </SelectGroup>
                   {/* Language Skills */}
                   <SelectGroup>
                     <SelectItem value="_group_language" disabled className="font-semibold !text-foreground !bg-muted py-2 px-3 -mx-1 my-1 rounded-sm hover:!bg-muted">
                       Language Skills
                     </SelectItem>
-                    {skills.filter(s => s.category === 'language').map(skill => (
-                      <SelectItem key={skill.id} value={skill.id}>
-                        {skill.name}
-                      </SelectItem>
-                    ))}
+                    {skills
+                      .filter(s => s.category === 'language')
+                      .filter(skill => !ticketSkills.some(ts => ts.skill_id === skill.id))
+                      .map(skill => (
+                        <SelectItem key={skill.id} value={skill.id}>
+                          {skill.name}
+                        </SelectItem>
+                      ))
+                    }
                   </SelectGroup>
                   {/* Soft Skills */}
                   <SelectGroup>
                     <SelectItem value="_group_soft_skill" disabled className="font-semibold !text-foreground !bg-muted py-2 px-3 -mx-1 my-1 rounded-sm hover:!bg-muted">
                       Soft Skills
                     </SelectItem>
-                    {skills.filter(s => s.category === 'soft_skill').map(skill => (
-                      <SelectItem key={skill.id} value={skill.id}>
-                        {skill.name}
+                    {skills
+                      .filter(s => s.category === 'soft_skill')
+                      .filter(skill => !ticketSkills.some(ts => ts.skill_id === skill.id))
+                      .map(skill => (
+                        <SelectItem key={skill.id} value={skill.id}>
+                          {skill.name}
+                        </SelectItem>
+                      ))
+                    }
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Required Proficiency</Label>
+              <Select 
+                value={proficiency.toString()} 
+                onValueChange={(value) => setProficiency(Number(value))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select level..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {[1, 2, 3, 4, 5].map(level => (
+                      <SelectItem key={level} value={level.toString()}>
+                        Level {level}
                       </SelectItem>
                     ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Required Proficiency (1-5)</Label>
-              <Select value={requiredProficiency.toString()} onValueChange={(value) => setRequiredProficiency(parseInt(value, 10))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select proficiency" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5].map(level => (
-                    <SelectItem key={level} value={level.toString()}>
-                      {level}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Button
+              onClick={handleAddSkill}
+              disabled={!selectedSkill || loading}
+            >
+              {loading ? 'Adding...' : 'Add Skill'}
+            </Button>
           </div>
-          <Button
-            onClick={handleAddSkill}
-            disabled={!selectedSkill || submitting}
-          >
-            {submitting ? 'Adding...' : 'Add Skill'}
-          </Button>
         </div>
 
         {/* Skills List */}
@@ -248,7 +259,7 @@ export function TicketSkillsDialog({ ticketId, open, onOpenChange, onSkillsUpdat
                       variant="ghost"
                       size="sm"
                       onClick={() => handleRemoveSkill(skill.id)}
-                      disabled={submitting}
+                      disabled={loading}
                     >
                       Remove
                     </Button>

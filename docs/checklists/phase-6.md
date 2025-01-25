@@ -12,7 +12,7 @@ Focus on enhancing the customer experience, as defined in @project-overview.md (
 [ ] FRONTEND: Set up FAQ/Knowledge Base pages using Shadcn UI components.  
 [ ] BACKEND: Expose secure endpoints for customers to query their own tickets (RLS locked).  
 [ ] BACKEND: Implement full-text search queries in the Knowledge Base table.  
-[ ] BACKEND: Configure a real-time chat backend (Supabase Realtime or a custom WebSocket).  
+[ ] BACKEND: Configure a real-time chat backend (Supabase Realtime).  
 [ ] BACKEND: (Optional) Add email-based ticket creation integration.
 
 ---

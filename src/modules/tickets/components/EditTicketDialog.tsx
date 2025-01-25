@@ -9,6 +9,7 @@ import { Button } from "@/ui/components/button"
 import { useState } from "react"
 import { TicketService } from "@/services/tickets"
 import { TicketNotes } from "./TicketNotes"
+import { TicketTags } from "./TicketTags"
 import { TicketSkillsDialog } from "./TicketSkillsDialog"
 import type { Ticket, TicketStatus, TicketPriority } from "../types/ticket.types"
 import { useQueryClient } from '@tanstack/react-query'
@@ -130,6 +131,11 @@ function EditTicketForm({ ticket, onSuccess, onCancel }: EditTicketFormProps) {
             </select>
           </div>
         </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Tags</label>
+          <TicketTags ticketId={ticket.id} />
+        </div>
       </div>
 
       <div className="flex justify-end gap-3">
@@ -161,30 +167,27 @@ export function EditTicketDialog({ ticket, open, onOpenChange, onSuccess }: Edit
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Ticket</DialogTitle>
           <DialogDescription>
-            Update the ticket details and manage notes below.
+            Update ticket details, manage skills, and add notes
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4">
+        <div className="space-y-6">
           <EditTicketForm
             ticket={ticket}
-            onSuccess={() => {
-              onOpenChange(false)
-              onSuccess?.()
-            }}
+            onSuccess={onSuccess}
             onCancel={() => onOpenChange(false)}
           />
 
+          {/* Skills Section */}
           <div className="border-t pt-4">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-medium">Required Skills</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Required Skills</h3>
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() => setSkillsDialogOpen(true)}
               >
                 Manage Skills
@@ -193,7 +196,7 @@ export function EditTicketDialog({ ticket, open, onOpenChange, onSuccess }: Edit
           </div>
 
           <div className="border-t pt-4">
-            <h3 className="font-medium mb-2">Notes & Updates</h3>
+            <h3 className="text-lg font-semibold">Notes & Updates</h3>
             <TicketNotes ticketId={ticket.id} />
           </div>
         </div>

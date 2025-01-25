@@ -1,53 +1,54 @@
 import { supabase } from './supabase'
+import type { CustomerTicket, TicketTimelineEvent, TicketSummary } from '@/modules/tickets/types/ticket.types'
 
-interface TicketTimelineEvent {
-    event_time: string
-    event_type: 'status_change' | 'note_added' | 'assignment_change'
-    event_description: string
-    actor_name: string
-}
-
-interface TicketSummary {
-    status: string
-    count: number
-    last_update: string
-}
-
-/**
- * Customer ticket service for handling customer-specific ticket operations
- */
-export const customerTicketService = {
+class CustomerTicketService {
     /**
      * Get timeline for a specific ticket
      */
     async getTicketTimeline(ticketId: string): Promise<TicketTimelineEvent[]> {
+        console.log('Fetching timeline for ticket:', ticketId)
+        
+        // First verify the ticket exists and user has access
+        const { data: ticket, error: ticketError } = await supabase
+            .from('customer_tickets')
+            .select('*')
+            .eq('id', ticketId)
+            .single()
+
+        if (ticketError) {
+            console.error('Error fetching ticket:', ticketError)
+            throw ticketError
+        }
+
+        if (!ticket) {
+            console.error('Ticket not found or no access:', ticketId)
+            throw new Error('Ticket not found or no access')
+        }
+
+        // Now fetch the timeline
         const { data, error } = await supabase
             .rpc('get_customer_ticket_timeline', {
                 p_ticket_id: ticketId
             })
 
-        if (error) throw error
-        return data
-    },
+        if (error) {
+            console.error('Error fetching timeline:', error)
+            throw error
+        }
+
+        return data as TicketTimelineEvent[]
+    }
 
     /**
      * Get ticket summary for the current user
      */
     async getTicketSummary(): Promise<TicketSummary[]> {
-        const {
-            data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!user) throw new Error('User not authenticated')
-
         const { data, error } = await supabase
-            .rpc('get_customer_ticket_summary', {
-                p_user_id: user.id
-            })
+            .rpc('get_customer_ticket_summary')
 
         if (error) throw error
-        return data
-    },
+        return data as TicketSummary[]
+    }
 
     /**
      * Get customer's tickets with optional filters
@@ -83,8 +84,8 @@ export const customerTicketService = {
 
         const { data, error } = await query.order('created_at', { ascending: false })
         if (error) throw error
-        return data
-    },
+        return data as CustomerTicket[]
+    }
 
     /**
      * Get notes for a specific ticket
@@ -98,7 +99,7 @@ export const customerTicketService = {
 
         if (error) throw error
         return data
-    },
+    }
 
     /**
      * Add a note to a ticket
@@ -114,4 +115,6 @@ export const customerTicketService = {
 
         if (error) throw error
     }
-} 
+}
+
+export const customerTicketService = new CustomerTicketService() 
