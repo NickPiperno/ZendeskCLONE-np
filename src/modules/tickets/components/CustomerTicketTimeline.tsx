@@ -2,10 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { customerTicketService } from '@/services/customer-tickets'
 import { Card } from '@/ui/components/card'
 import { Skeleton } from '@/ui/components/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/components/tabs'
-import { ThreadList } from './thread/ThreadList'
 import { ThreadView } from './thread/ThreadView'
-import { MessageComposer } from './thread/MessageComposer'
 import type { TicketTimelineEvent } from '../types/ticket.types'
 
 interface CustomerTicketTimelineProps {
@@ -94,40 +91,24 @@ export function CustomerTicketTimeline({ ticketId }: CustomerTicketTimelineProps
   }
 
   return (
-    <Tabs defaultValue="threads" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="threads">Threads</TabsTrigger>
-        <TabsTrigger value="timeline">Timeline</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="threads" className="space-y-6">
-        <ThreadList ticketId={ticketId} />
-        <div className="border-t pt-6">
-          <MessageComposer ticketId={ticketId} threadId={ticketId} />
-        </div>
-      </TabsContent>
-
-      <TabsContent value="timeline">
-        <div className="space-y-4">
-          {events.map((event, index) => (
-            <Card key={index} className="p-4">
-              <div className="flex items-start gap-4">
-                <div className="text-2xl">
-                  {getEventIcon(event.event_type)}
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{event.event_description}</p>
-                  <div className="flex justify-between items-center mt-2 text-sm text-muted-foreground">
-                    <span>By {event.actor_name}</span>
-                    <time>{new Date(event.event_time).toLocaleString()}</time>
-                  </div>
-                  {renderEventDetails(event)}
-                </div>
+    <div className="space-y-4">
+      {events.map((event, index) => (
+        <Card key={index} className="p-4">
+          <div className="flex items-start gap-4">
+            <div className="text-2xl">
+              {getEventIcon(event.event_type)}
+            </div>
+            <div className="flex-1">
+              <p className="font-medium">{event.event_description}</p>
+              <div className="flex justify-between items-center mt-2 text-sm text-muted-foreground">
+                <span>By {event.actor_name}</span>
+                <time>{new Date(event.event_time).toLocaleString()}</time>
               </div>
-            </Card>
-          ))}
-        </div>
-      </TabsContent>
-    </Tabs>
+              {renderEventDetails(event)}
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
   )
 } 

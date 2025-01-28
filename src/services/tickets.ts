@@ -30,10 +30,13 @@ interface TicketSkill {
   required_proficiency: number
 }
 
-interface AgentMatch {
-  agent_id: string | null
-  match_score: number
-  reason: string
+interface AgentSkill {
+  id: string
+  user_id: string
+  skill_id: string
+  proficiency_level: number
+  user_name: string
+  user_email: string
 }
 
 /**
@@ -108,6 +111,7 @@ export class TicketService {
 
       console.log('Creating ticket:', { ...ticket, description: '...' })
       
+      // Create the ticket without triggering auto-assignment
       const { data, error } = await supabase
         .from('tickets')
         .insert([{
@@ -115,7 +119,8 @@ export class TicketService {
           // If admin is creating ticket and user_id is provided, use that, otherwise use current user's ID
           user_id: profile?.role === 'admin' && ticket.user_id ? ticket.user_id : user.id,
           status: ticket.status || 'open',
-          priority: ticket.priority || 'medium'
+          priority: ticket.priority || 'medium',
+          assigned_to: null // Explicitly set to null to prevent auto-assignment
         }])
         .select()
         .single()
@@ -375,10 +380,14 @@ export class TicketService {
   }
 
   /**
-   * Find best agent match for a ticket
+   * Find best agent match for a ticket based on skills, proficiency, and availability
+   * Returns the UUID of the best matching agent or null if no match found
    */
-  static async findBestAgentMatch(ticketId: string): Promise<AgentMatch | null> {
+  static async findBestAgentMatch(ticketId: string): Promise<string | null> {
     try {
+      console.log('=== Starting agent matching process ===')
+      console.log('Ticket ID:', ticketId)
+
       const { data, error } = await supabase
         .rpc('find_best_agent_match', { p_ticket_id: ticketId })
 
@@ -387,10 +396,10 @@ export class TicketService {
         return null
       }
 
-      // Log the response for debugging
-      console.log('Database response:', data)
+      console.log('Selected agent ID:', data)
+      console.log('=== Agent matching process complete ===')
       
-      return data as AgentMatch
+      return data as string | null
     } catch (error) {
       console.error('Error in findBestAgentMatch:', error instanceof PostgrestError ? error.message : 'Unknown error')
       return null
@@ -399,27 +408,46 @@ export class TicketService {
 
   /**
    * Automatically assign ticket to best matching agent
+   * Uses findBestAgentMatch to find the agent and updates the ticket
    */
-  static async autoAssignTicket(ticketId: string): Promise<string | TicketError> {
+  static async autoAssignTicket(ticketId: string): Promise<string | null> {
     try {
       console.log('Starting auto-assignment for ticket:', ticketId)
-      const { data, error } = await supabase
-        .rpc('auto_assign_ticket', { p_ticket_id: ticketId })
+      
+      // Find the best matching agent using our existing function
+      const matchedAgentId = await this.findBestAgentMatch(ticketId)
 
-      if (error) {
-        console.error('Database error during auto-assignment:', error)
-        throw error
+      if (!matchedAgentId) {
+        console.log('No matching agent found')
+        return null
+      }
+
+      // Update the ticket with the assigned agent
+      console.log('Updating ticket assignment...')
+      const { error: updateError } = await supabase
+        .from('tickets')
+        .update({ 
+          assigned_to: matchedAgentId,
+          status: 'open',  // Ensure ticket is marked as open when assigned
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', ticketId)
+
+      if (updateError) {
+        console.error('Error updating ticket assignment:', updateError)
+        return null
       }
       
-      console.log('Auto-assignment result:', data)
-      return data
+      console.log('Auto-assignment successful. Agent ID:', matchedAgentId)
+      return matchedAgentId
     } catch (error) {
-      console.error('Error auto-assigning ticket:', error)
-      return {
-        code: TicketErrorCodes.ASSIGNMENT_ERROR,
-        message: 'Failed to auto-assign ticket',
-        details: error
-      }
+      console.error('Error in autoAssignTicket:', error instanceof PostgrestError ? {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      } : error)
+      return null
     }
   }
 
@@ -460,7 +488,10 @@ export class TicketService {
         }
       }
 
-      return { data, error: null }
+      return { 
+        data: data as AgentSkill[], 
+        error: null 
+      }
     } catch (error) {
       console.error('Error getting agent skills:', error)
       return {
@@ -475,11 +506,20 @@ export class TicketService {
    */
   static async getAgentSchedules() {
     try {
-      const currentDay = new Date().getDay() // 0-6, where 0 is Sunday
+      // Get current time in EST
+      const now = new Date();
+      const estTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+      const currentDay = estTime.getDay() || 7; // Convert Sunday (0) to 7 to match SQL
+      
+      console.log('Fetching schedules - EST time:', estTime.toISOString());
+      console.log('EST day of week:', currentDay);
+
       const { data, error } = await supabase
         .from('team_schedules')
         .select('*')
         .eq('day_of_week', currentDay)
+        .eq('is_active', true)
+        .eq('deleted', false)
 
       if (error) {
         console.error('Error getting agent schedules:', error)
@@ -532,47 +572,25 @@ export class TicketService {
       if (schedules.error) {
         console.error('Error getting agent schedules:', schedules.error)
       } else {
-        const currentTime = new Date().toLocaleTimeString()
-        console.log('Current time:', currentTime)
-        console.log('Current day:', new Date().getDay())
+        const now = new Date();
+        const estTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+        console.log('Current EST time:', estTime.toLocaleTimeString());
+        console.log('Current EST day:', estTime.getDay() || 7); // Convert Sunday (0) to 7
         console.log('Agent schedules:', JSON.stringify(schedules.data, null, 2))
       }
       
-      // Find potential agent match
-      console.log('Step 4: Finding best agent match...')
-      const bestMatch = await TicketService.findBestAgentMatch(ticketId)
-      console.log('Best agent match result:', JSON.stringify(bestMatch, null, 2))
-      
-      // Check if we got an error or no match
-      if (!bestMatch || !bestMatch.agent_id) {
-        console.log('No suitable agent found:', bestMatch?.reason || 'Unknown reason')
-        return { 
-          data: null, 
-          error: bestMatch?.reason || 'No suitable agent found. Check required skills and agent availability.' 
-        }
-      }
-
-      // At this point bestMatch must contain a valid agent_id
-      // We have a match, proceed with auto-assignment
-      console.log('Step 5: Proceeding with auto-assignment...')
-      console.log('Calling auto_assign_ticket with ID:', ticketId)
-      const { data, error } = await supabase
-        .rpc('auto_assign_ticket', { p_ticket_id: ticketId })
-
-      if (error) {
-        console.error('Database error during auto-assignment:', error)
-        throw error
-      }
-
-      console.log('Auto-assignment result:', data)
+      // Proceed with auto-assignment
+      console.log('Step 4: Proceeding with auto-assignment...')
+      console.log('Finding best agent match for ticket:', ticketId)
+      const assignedAgentId = await TicketService.autoAssignTicket(ticketId)
 
       // If an agent was assigned, return their ID
-      if (data) {
+      if (assignedAgentId) {
         console.log('=== Ticket reassignment successful ===')
-        return { data, error: null }
+        return { data: assignedAgentId, error: null }
       }
 
-      // If no agent was found (shouldn't happen at this point, but just in case)
+      // If no agent was assigned
       console.log('=== Ticket reassignment failed - no agent assigned ===')
       return { 
         data: null, 

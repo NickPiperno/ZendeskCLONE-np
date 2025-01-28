@@ -11,7 +11,7 @@ export function useCreateTicket() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function createTicket(ticket: Omit<TicketInsert, 'created_at' | 'updated_at' | 'user_id'>) {
+  async function createTicket(ticket: Omit<TicketInsert, 'created_at' | 'updated_at'>) {
     try {
       setLoading(true)
       setError(null)

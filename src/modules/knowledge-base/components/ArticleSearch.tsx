@@ -20,7 +20,7 @@ export function ArticleSearch({ onResultsFound, categoryId }: ArticleSearchProps
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery)
       if (searchQuery.length === 0) {
-        onResultsFound([])
+        onResultsFound([])  // Clear search results when search is empty
       }
     }, 300) // 300ms delay
 
@@ -30,6 +30,7 @@ export function ArticleSearch({ onResultsFound, categoryId }: ArticleSearchProps
   const { data: results } = useQuery({
     queryKey: ['kb-search', debouncedQuery, categoryId],
     queryFn: async () => {
+      if (!debouncedQuery) return []
       const results = await knowledgeBaseService.searchArticles(debouncedQuery, categoryId)
       onResultsFound(results)
       return results

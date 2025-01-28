@@ -12,8 +12,10 @@ export function KnowledgeBasePage() {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
 
   const handleSearchResults = (results: SearchKBArticlesResponse[]) => {
-    setSearchResults(results)
-    setSelectedCategoryId(null)
+    setSearchResults(results.length > 0 ? results : undefined)
+    if (results.length > 0) {
+      setSelectedCategoryId(null)  // Clear category selection when search has results
+    }
   }
 
   const handleCategorySelect = (categoryId: string | null) => {

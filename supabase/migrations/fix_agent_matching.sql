@@ -32,7 +32,12 @@ $$;
 -- Create function to get all user skills
 CREATE OR REPLACE FUNCTION public.get_all_user_skills()
 RETURNS TABLE (
-    user_skills jsonb
+    id UUID,
+    user_id UUID,
+    skill_id UUID,
+    proficiency_level integer,
+    user_name text,
+    user_email text
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -40,257 +45,169 @@ AS $$
 BEGIN
     RETURN QUERY
     SELECT 
-        jsonb_build_object(
-            'id', us.id,
-            'user_id', us.user_id,
-            'skill_id', us.skill_id,
-            'proficiency_level', us.proficiency_level,
-            'user_name', p.full_name,
-            'user_email', p.email
-        ) as user_skills
+        us.id,
+        us.user_id,
+        us.skill_id,
+        us.proficiency_level,
+        p.full_name as user_name,
+        p.email as user_email
     FROM user_skills us
     JOIN profiles p ON p.id = us.user_id
     WHERE p.role = 'agent';
 END;
 $$;
 
--- Recreate function with logging
+-- Drop and recreate find_best_agent_match
+DROP FUNCTION IF EXISTS public.find_best_agent_match(UUID);
+
 CREATE OR REPLACE FUNCTION public.find_best_agent_match(p_ticket_id UUID)
-RETURNS jsonb
+RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
+VOLATILE
 AS $$
 DECLARE
-    v_ticket_priority text;
     v_current_time time;
     v_current_day integer;
-    v_best_agent jsonb;
-    v_available_agents jsonb;
-    v_required_skills jsonb;
+    v_best_agent_id UUID;
+    v_schedule_count integer;
+    v_ticket_exists boolean;
+    v_schedule record;
+    v_current_timestamp timestamp;
 BEGIN
-    -- Get required skills first
-    SELECT jsonb_agg(
-        jsonb_build_object(
-            'skill_id', ts.skill_id,
-            'required_proficiency', ts.required_proficiency
-        )
-    )
-    INTO v_required_skills
-    FROM ticket_skills ts
-    WHERE ts.ticket_id = p_ticket_id;
-
-    -- Log required skills
-    RAISE NOTICE 'Required skills: %', v_required_skills;
-
-    -- Get current time and day
-    SELECT CURRENT_TIME INTO v_current_time;
-    SELECT EXTRACT(DOW FROM CURRENT_DATE) INTO v_current_day;
-
-    -- Log schedule debug info
-    RAISE NOTICE 'Current time: %, Current day: %', v_current_time, v_current_day;
+    -- Verify ticket exists and log its details
+    SELECT EXISTS (
+        SELECT 1 FROM tickets WHERE id = p_ticket_id AND deleted = false
+    ) INTO v_ticket_exists;
     
-    -- Check schedule availability
-    WITH schedule_check AS (
-        SELECT 
-            ts.user_id,
-            ts.day_of_week,
-            ts.start_time,
-            ts.end_time,
-            ts.is_active,
-            v_current_time BETWEEN ts.start_time AND ts.end_time as is_within_hours
-        FROM team_schedules ts
-        WHERE ts.day_of_week = v_current_day
-    )
-    SELECT jsonb_agg(to_jsonb(s)) INTO v_available_agents
-    FROM schedule_check s;
-    
-    RAISE NOTICE 'Schedule check results: %', v_available_agents;
-
-    -- Get available agents and their skills
-    SELECT jsonb_agg(
-        jsonb_build_object(
-            'id', p.id,
-            'full_name', p.full_name,
-            'email', p.email,
-            'skills', (
-                SELECT jsonb_agg(
-                    jsonb_build_object(
-                        'id', us.id,
-                        'skill_id', us.skill_id,
-                        'proficiency_level', us.proficiency_level
-                    )
-                )
-                FROM user_skills us
-                WHERE us.user_id = p.id
-            ),
-            'schedule', (
-                SELECT jsonb_agg(
-                    jsonb_build_object(
-                        'day_of_week', ts.day_of_week,
-                        'start_time', ts.start_time,
-                        'end_time', ts.end_time,
-                        'is_active', ts.is_active
-                    )
-                )
-                FROM team_schedules ts
-                WHERE ts.user_id = p.id
-                    AND ts.day_of_week = v_current_day
-            )
-        )
-    )
-    INTO v_available_agents
-    FROM profiles p
-    WHERE p.role = 'agent';
-
-    -- Log available agents
-    RAISE NOTICE 'Available agents and their skills: %', v_available_agents;
-
-    -- Get ticket priority
-    SELECT priority INTO v_ticket_priority
-    FROM tickets
-    WHERE id = p_ticket_id AND deleted = false;
-
-    IF NOT FOUND THEN
-        RETURN jsonb_build_object(
-            'agent_id', NULL,
-            'match_score', 0,
-            'reason', 'Ticket not found'
-        );
+    IF NOT v_ticket_exists THEN
+        RAISE NOTICE 'Ticket not found or deleted: %', p_ticket_id;
+        RETURN NULL;
     END IF;
 
-    WITH required_skills AS (
+    -- Get and log timezone information
+    RAISE NOTICE 'Database timezone: %', current_setting('TIMEZONE');
+    RAISE NOTICE 'Session timezone: %', current_setting('timezone');
+    
+    -- Get current time and day in EST (America/New_York)
+    SELECT CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York' INTO v_current_timestamp;
+    SELECT CURRENT_TIME AT TIME ZONE 'America/New_York' INTO v_current_time;
+    -- Get day of week (1-7, where 1 is Monday) in EST
+    SELECT EXTRACT(DOW FROM v_current_timestamp)::integer INTO v_current_day;
+    -- Convert Sunday (0) to 7 to match the schedule format
+    IF v_current_day = 0 THEN
+        v_current_day := 7;
+    END IF;
+    
+    RAISE NOTICE 'Current EST time: %, day: %', v_current_time, v_current_day;
+    RAISE NOTICE 'Day mapping: 1=Monday, 2=Tuesday, ..., 7=Sunday';
+
+    -- Log available schedules for debugging
+    SELECT COUNT(*) INTO v_schedule_count
+    FROM team_schedules ts
+    WHERE ts.day_of_week = v_current_day
+        AND ts.is_active = true
+        AND ts.deleted = false
+        AND v_current_time BETWEEN ts.start_time AND ts.end_time;
+    
+    RAISE NOTICE 'Number of active schedules for current time: %', v_schedule_count;
+    
+    -- Log all schedules regardless of day
+    RAISE NOTICE 'All schedules in system:';
+    FOR v_schedule IN (
         SELECT 
-            ts.skill_id,
-            ts.required_proficiency
-        FROM 
-            ticket_skills ts
-        WHERE 
-            ts.ticket_id = p_ticket_id
-    ),
-    available_agents AS (
-        SELECT 
-            p.id as agent_id,
-            p.full_name,
-            p.email,
-            COUNT(DISTINCT t.id) as active_tickets
-        FROM 
-            profiles p
-            LEFT JOIN tickets t ON t.assigned_to = p.id 
+            user_id, 
+            day_of_week,
+            start_time, 
+            end_time, 
+            is_active, 
+            deleted,
+            CASE day_of_week
+                WHEN 1 THEN 'Monday'
+                WHEN 2 THEN 'Tuesday'
+                WHEN 3 THEN 'Wednesday'
+                WHEN 4 THEN 'Thursday'
+                WHEN 5 THEN 'Friday'
+                WHEN 6 THEN 'Saturday'
+                WHEN 7 THEN 'Sunday'
+            END as day_name
+        FROM team_schedules
+        ORDER BY day_of_week, start_time
+    ) LOOP
+        RAISE NOTICE 'User: %, Day: % (%), Time: % to %, Active: %, Deleted: %', 
+            v_schedule.user_id, 
+            v_schedule.day_of_week,
+            v_schedule.day_name,
+            v_schedule.start_time, 
+            v_schedule.end_time, 
+            v_schedule.is_active, 
+            v_schedule.deleted;
+    END LOOP;
+
+    -- Find best agent with all conditions in a single query
+    SELECT 
+        p.id INTO v_best_agent_id
+    FROM 
+        profiles p
+        -- Join with user skills and match against ticket skills
+        JOIN user_skills us ON us.user_id = p.id
+        JOIN ticket_skills ts ON ts.skill_id = us.skill_id 
+            AND ts.ticket_id = p_ticket_id
+        -- Check schedule
+        JOIN team_schedules sch ON sch.user_id = p.id
+            AND sch.day_of_week = v_current_day
+            AND sch.is_active = true
+            AND sch.deleted = false
+            AND v_current_time BETWEEN sch.start_time AND sch.end_time
+    WHERE 
+        p.role = 'agent'
+    GROUP BY 
+        p.id
+    HAVING 
+        -- Must have all required skills
+        COUNT(DISTINCT ts.skill_id) = (
+            SELECT COUNT(DISTINCT skill_id) 
+            FROM ticket_skills 
+            WHERE ticket_id = p_ticket_id
+        )
+    ORDER BY
+        -- Order by total proficiency (higher is better)
+        SUM(us.proficiency_level) DESC,
+        -- Then by workload (lower is better)
+        (
+            SELECT COUNT(*)
+            FROM tickets t
+            WHERE t.assigned_to = p.id
                 AND t.status NOT IN ('resolved', 'closed')
                 AND t.deleted = false
-        WHERE 
-            p.role = 'agent'
-            AND EXISTS (
-                SELECT 1 
-                FROM team_schedules ts 
-                WHERE ts.user_id = p.id 
-                    AND ts.day_of_week = v_current_day
-                    AND ts.is_active = true
-                    AND ts.deleted = false
-                    AND v_current_time BETWEEN ts.start_time AND (
-                        SELECT MAX(end_time)
-                        FROM team_schedules ts2
-                        WHERE ts2.user_id = p.id
-                            AND ts2.day_of_week = v_current_day
-                            AND ts2.is_active = true
-                            AND ts2.deleted = false
-                    )
-            )
-        GROUP BY 
-            p.id, p.full_name, p.email
-    ),
-    agent_skill_scores AS (
-        SELECT 
-            aa.agent_id,
-            aa.full_name,
-            aa.email,
-            CASE 
-                WHEN COUNT(rs.*) = 0 THEN 0  -- No skills required
-                WHEN COUNT(DISTINCT CASE WHEN us.proficiency_level >= rs.required_proficiency THEN rs.skill_id END) = COUNT(DISTINCT rs.skill_id) 
-                THEN 1  -- All required skills match
-                ELSE 0  -- Not all skills match
-            END as skill_score,
-            string_agg(
-                CASE 
-                    WHEN us.proficiency_level >= rs.required_proficiency 
-                    THEN 'Has skill ' || rs.skill_id || ' at level ' || us.proficiency_level
-                    ELSE 'Missing skill ' || rs.skill_id || ' or insufficient level'
-                END,
-                ', '
-            ) as skill_details
-        FROM 
-            available_agents aa
-            CROSS JOIN required_skills rs
-            LEFT JOIN user_skills us ON us.user_id = aa.agent_id 
-                AND us.skill_id = rs.skill_id
-        GROUP BY 
-            aa.agent_id, aa.full_name, aa.email
-    ),
-    agent_workload_scores AS (
-        SELECT 
-            aa.agent_id,
-            aa.full_name,
-            CASE 
-                WHEN aa.active_tickets = 0 THEN 1
-                ELSE 1.0 / aa.active_tickets
-            END as workload_score,
-            aa.active_tickets
-        FROM 
-            available_agents aa
-    ),
-    final_scores AS (
-        SELECT 
-            ass.agent_id,
-            ass.full_name,
-            ass.email,
-            ass.skill_score,
-            aws.workload_score,
-            aws.active_tickets,
-            ass.skill_details,
-            (ass.skill_score * 0.7 + aws.workload_score * 0.3) as final_score
-        FROM 
-            agent_skill_scores ass
-            JOIN agent_workload_scores aws ON aws.agent_id = ass.agent_id
-        WHERE 
-            ass.skill_score > 0  -- Only consider agents with matching skills
-    )
-    SELECT 
-        jsonb_build_object(
-            'agent_id', agent_id,
-            'match_score', final_score,
-            'reason', CASE 
-                WHEN agent_id IS NULL THEN 
-                    CASE 
-                        WHEN NOT EXISTS (SELECT 1 FROM available_agents) THEN 'No agents available during current schedule'
-                        WHEN NOT EXISTS (SELECT 1 FROM required_skills) THEN 'No required skills specified for ticket'
-                        ELSE 'No agents with required skills found'
-                    END
-                ELSE skill_details || ', Workload: ' || active_tickets || ' active tickets'
-            END
-        )
-    INTO v_best_agent
-    FROM final_scores
-    ORDER BY final_score DESC
+        ) ASC
     LIMIT 1;
 
-    -- If no match found, return null with reason
-    IF v_best_agent IS NULL THEN
-        RETURN jsonb_build_object(
-            'agent_id', NULL,
-            'match_score', 0,
-            'reason', CASE 
-                WHEN v_required_skills IS NULL THEN 'No required skills specified for ticket'
-                WHEN v_available_agents IS NULL THEN 'No agents available'
-                ELSE 'No agents match required skills'
-            END
-        );
+    -- Log the result with detailed schedule information
+    IF v_best_agent_id IS NOT NULL THEN
+        RAISE NOTICE 'Found matching agent: %', v_best_agent_id;
+        -- Log the agent's schedule
+        RAISE NOTICE 'Agent schedule for today (Day %):',  v_current_day;
+        FOR v_schedule IN (
+            SELECT start_time, end_time, day_of_week
+            FROM team_schedules
+            WHERE user_id = v_best_agent_id
+                AND day_of_week = v_current_day
+                AND is_active = true
+                AND deleted = false
+        ) LOOP
+            RAISE NOTICE 'Schedule: Day %, % to %', 
+                v_schedule.day_of_week, v_schedule.start_time, v_schedule.end_time;
+        END LOOP;
+    ELSE
+        RAISE NOTICE 'No matching agent found for day: %', v_current_day;
     END IF;
 
-    RETURN v_best_agent;
+    RETURN v_best_agent_id;
 END;
 $$;
 
--- Grant execute permissions
+-- Set permissions
 REVOKE EXECUTE ON FUNCTION public.find_best_agent_match(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.find_best_agent_match(UUID) TO authenticated;
 REVOKE EXECUTE ON FUNCTION public.get_all_user_skills() FROM PUBLIC;

@@ -1,14 +1,22 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/ui/components/button'
 import { useCreateTicket } from '../hooks/useCreateTicket'
 import type { TicketPriority } from '../types/ticket.types'
 import { TicketSkillsDialog } from './TicketSkillsDialog'
 import { useAuth } from '@/lib/auth/AuthContext'
 import { useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/services/supabase'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/components/select'
 
 interface NewTicketFormProps {
   onSuccess?: () => void
   onCancel?: () => void
+}
+
+interface User {
+  id: string
+  full_name: string
+  email: string
 }
 
 /**
@@ -16,14 +24,35 @@ interface NewTicketFormProps {
  * Handles validation and submission
  */
 export function NewTicketForm({ onSuccess, onCancel }: NewTicketFormProps) {
-  const { createTicket, loading, error } = useCreateTicket()
+  const { createTicket, loading } = useCreateTicket()
   const { isAdmin } = useAuth()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<TicketPriority>('medium')
   const [newTicketId, setNewTicketId] = useState<string | null>(null)
   const [skillsDialogOpen, setSkillsDialogOpen] = useState(false)
+  const [users, setUsers] = useState<User[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<string>('')
   const queryClient = useQueryClient()
+  const [errorMessage, setError] = useState<string | null>(null)
+
+  // Fetch users if admin
+  useEffect(() => {
+    if (isAdmin) {
+      const fetchUsers = async () => {
+        const { data: users, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .eq('role', 'user')
+        
+        if (!error && users) {
+          setUsers(users)
+        }
+      }
+
+      fetchUsers()
+    }
+  }, [isAdmin])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -32,10 +61,17 @@ export function NewTicketForm({ onSuccess, onCancel }: NewTicketFormProps) {
       return
     }
 
+    // For admins, require user selection
+    if (isAdmin && !selectedUserId) {
+      setError('Please select a user for this ticket')
+      return
+    }
+
     const result = await createTicket({
       title: title.trim(),
       description: description.trim(),
-      priority
+      priority,
+      ...(isAdmin && { user_id: selectedUserId })
     })
 
     if (result) {
@@ -61,12 +97,32 @@ export function NewTicketForm({ onSuccess, onCancel }: NewTicketFormProps) {
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
+        {errorMessage && (
           <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive">
-            {error}
+            {errorMessage}
           </div>
         )}
         
+        {isAdmin && (
+          <div className="space-y-2">
+            <label htmlFor="user" className="text-sm font-medium">
+              User
+            </label>
+            <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a user..." />
+              </SelectTrigger>
+              <SelectContent>
+                {users.map(user => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.full_name} ({user.email})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="space-y-2">
           <label htmlFor="title" className="text-sm font-medium">
             Title

@@ -11,10 +11,12 @@ interface ArticleListProps {
 }
 
 export function ArticleList({ searchResults, categoryId, onArticleSelect }: ArticleListProps) {
-  const { data: categoryArticles, isLoading: categoryLoading } = useQuery<KBArticle[]>({
+  const { data: categoryArticles, isLoading: categoryLoading } = useQuery<KBArticle[], Error>({
     queryKey: ['kb-category-articles', categoryId],
     queryFn: () => categoryId ? knowledgeBaseService.getCategoryArticles(categoryId) : Promise.resolve([]),
-    enabled: !searchResults && categoryId !== undefined
+    enabled: !searchResults && categoryId != null,
+    gcTime: 0,  // Don't keep the data in cache
+    refetchOnMount: true  // Always refetch when component mounts
   })
 
   // Show loading state
@@ -29,7 +31,7 @@ export function ArticleList({ searchResults, categoryId, onArticleSelect }: Arti
   }
 
   // Show search results if available
-  const articles = searchResults || categoryArticles || []
+  const articles: (KBArticle | SearchKBArticlesResponse)[] = searchResults || categoryArticles || []
 
   if (!articles.length) {
     return (
