@@ -2,6 +2,7 @@
 ALTER TABLE public.ticket_threads ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if any
+DROP POLICY IF EXISTS "Customers can view messages in their threads" ON public.ticket_notes;
 DROP POLICY IF EXISTS "Customers can view their own ticket threads" ON public.ticket_threads;
 DROP POLICY IF EXISTS "Agents can view assigned ticket threads" ON public.ticket_threads;
 DROP POLICY IF EXISTS "Admins can view all ticket threads" ON public.ticket_threads;
@@ -21,6 +22,7 @@ USING (
         WHERE t.id = ticket_id
         AND t.user_id = auth.uid()
         AND NOT t.deleted
+        AND NOT deleted
     )
 );
 
@@ -30,17 +32,10 @@ FOR SELECT
 USING (
     EXISTS (
         SELECT 1 FROM public.tickets t
-        JOIN public.ticket_assignments ta ON ta.ticket_id = t.id
         WHERE t.id = ticket_id
-        AND ta.agent_id = auth.uid()
+        AND t.assigned_to = auth.uid()
         AND NOT t.deleted
-    )
-    OR
-    EXISTS (
-        SELECT 1 FROM public.profiles p
-        WHERE p.id = auth.uid()
-        AND p.role = 'agent'
-        AND thread_type = 'ai_initiated'
+        AND NOT deleted
     )
 );
 
@@ -67,31 +62,21 @@ WITH CHECK (
         AND NOT t.deleted
     )
     AND thread_type = 'customer_initiated'
+    AND NOT deleted
 );
 
 CREATE POLICY "Agents can create threads on assigned tickets"
 ON public.ticket_threads
 FOR INSERT
 WITH CHECK (
-    (
-        EXISTS (
-            SELECT 1 FROM public.tickets t
-            JOIN public.ticket_assignments ta ON ta.ticket_id = t.id
-            WHERE t.id = ticket_id
-            AND ta.agent_id = auth.uid()
-            AND NOT t.deleted
-        )
-        AND thread_type IN ('agent_initiated', 'ai_initiated')
+    EXISTS (
+        SELECT 1 FROM public.tickets t
+        WHERE t.id = ticket_id
+        AND t.assigned_to = auth.uid()
+        AND NOT t.deleted
     )
-    OR
-    (
-        EXISTS (
-            SELECT 1 FROM public.profiles p
-            WHERE p.id = auth.uid()
-            AND p.role = 'agent'
-        )
-        AND thread_type = 'ai_initiated'
-    )
+    AND thread_type IN ('agent_initiated', 'ai_initiated')
+    AND NOT deleted
 );
 
 CREATE POLICY "Admins can create threads on any ticket"
@@ -112,18 +97,16 @@ FOR UPDATE
 USING (
     EXISTS (
         SELECT 1 FROM public.tickets t
-        JOIN public.ticket_assignments ta ON ta.ticket_id = t.id
         WHERE t.id = ticket_id
-        AND ta.agent_id = auth.uid()
+        AND t.assigned_to = auth.uid()
         AND NOT t.deleted
     )
 )
 WITH CHECK (
     EXISTS (
         SELECT 1 FROM public.tickets t
-        JOIN public.ticket_assignments ta ON ta.ticket_id = t.id
         WHERE t.id = ticket_id
-        AND ta.agent_id = auth.uid()
+        AND t.assigned_to = auth.uid()
         AND NOT t.deleted
     )
 );
@@ -164,11 +147,13 @@ FOR SELECT
 USING (
     EXISTS (
         SELECT 1 FROM public.tickets t
-        WHERE t.id = ticket_id
+        JOIN public.ticket_threads tt ON tt.ticket_id = t.id
+        WHERE tt.id = thread_id
         AND t.user_id = auth.uid()
         AND NOT t.deleted
+        AND NOT tt.deleted
+        AND NOT is_internal
     )
-    AND NOT is_internal
 );
 
 CREATE POLICY "Agents can view messages in assigned threads"
@@ -177,10 +162,11 @@ FOR SELECT
 USING (
     EXISTS (
         SELECT 1 FROM public.tickets t
-        JOIN public.ticket_assignments ta ON ta.ticket_id = t.id
-        WHERE t.id = ticket_id
-        AND ta.agent_id = auth.uid()
+        JOIN public.ticket_threads tt ON tt.ticket_id = t.id
+        WHERE tt.id = thread_id
+        AND t.assigned_to = auth.uid()
         AND NOT t.deleted
+        AND NOT tt.deleted
     )
 );
 
@@ -206,6 +192,7 @@ WITH CHECK (
         WHERE tt.id = thread_id
         AND t.user_id = auth.uid()
         AND NOT t.deleted
+        AND NOT tt.deleted
         AND tt.thread_type = 'customer_initiated'
     )
     AND message_type = 'customer'
@@ -218,11 +205,11 @@ FOR INSERT
 WITH CHECK (
     EXISTS (
         SELECT 1 FROM public.tickets t
-        JOIN public.ticket_assignments ta ON ta.ticket_id = t.id
         JOIN public.ticket_threads tt ON tt.ticket_id = t.id
         WHERE tt.id = thread_id
-        AND ta.agent_id = auth.uid()
+        AND t.assigned_to = auth.uid()
         AND NOT t.deleted
+        AND NOT tt.deleted
     )
     AND message_type IN ('agent', 'ai')
 );

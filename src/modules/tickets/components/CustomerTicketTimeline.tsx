@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import { customerTicketService } from '@/services/customer-tickets'
 import { Card } from '@/ui/components/card'
 import { Skeleton } from '@/ui/components/skeleton'
-import { ThreadView } from './thread/ThreadView'
 import type { TicketTimelineEvent } from '../types/ticket.types'
 
 interface CustomerTicketTimelineProps {
@@ -27,7 +26,12 @@ export function CustomerTicketTimeline({ ticketId }: CustomerTicketTimelineProps
     )
   }
 
-  if (!events?.length) {
+  // Filter out thread-related events
+  const filteredEvents = events?.filter(event => 
+    !['thread_created', 'message_added'].includes(event.event_type)
+  )
+
+  if (!filteredEvents?.length) {
     return (
       <div className="text-center py-8">
         <p className="text-muted-foreground">No timeline events found</p>
@@ -45,10 +49,6 @@ export function CustomerTicketTimeline({ ticketId }: CustomerTicketTimelineProps
         return '📝'
       case 'assignment_change':
         return '👤'
-      case 'thread_created':
-        return '💬'
-      case 'message_added':
-        return '✉️'
       default:
         return '•'
     }
@@ -75,16 +75,6 @@ export function CustomerTicketTimeline({ ticketId }: CustomerTicketTimelineProps
         )
       case 'assignment_change':
         return null // We already show a user-friendly message in event_description
-      case 'thread_created':
-      case 'message_added':
-        if (event.thread_id) {
-          return (
-            <div className="mt-4">
-              <ThreadView ticketId={ticketId} threadId={event.thread_id} />
-            </div>
-          )
-        }
-        return null
       default:
         return null
     }
@@ -92,7 +82,7 @@ export function CustomerTicketTimeline({ ticketId }: CustomerTicketTimelineProps
 
   return (
     <div className="space-y-4">
-      {events.map((event, index) => (
+      {filteredEvents.map((event, index) => (
         <Card key={index} className="p-4">
           <div className="flex items-start gap-4">
             <div className="text-2xl">

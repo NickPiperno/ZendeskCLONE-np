@@ -39,7 +39,7 @@ interface Thread {
 ### 2. Thread -> Note
 - One thread contains multiple notes
 - Each note belongs to one thread
-- Notes represent individual messages
+- Notes represent individual messages in chronological order
 ```typescript
 interface ThreadNote {
     id: string
@@ -48,7 +48,6 @@ interface ThreadNote {
     created_at: string
     created_by: string
     message_type: 'customer' | 'agent' | 'system' | 'ai'
-    parent_id?: string  // For reply chains within thread
     metadata?: {
         ai_processed: boolean
         sentiment?: string
@@ -106,7 +105,7 @@ interface EnhancedTimelineEvent extends TicketTimelineEvent {
    - Timeline updated with new thread
 
 2. **Message Flow**
-   - New message added to thread
+   - New message added to thread (chronologically ordered)
    - AI processes message content
    - Thread metadata updated
    - Timeline reflects new activity

@@ -47,6 +47,7 @@ export class ThreadService {
                     ticket_id: ticketId,
                     title: data.title,
                     thread_type: data.thread_type,
+                    created_by: user.id,
                     ai_context: {
                         context_type: 'question',
                         priority_indicator: 0.5
@@ -94,17 +95,27 @@ export class ThreadService {
         try {
             let query = supabase
                 .from('ticket_threads')
-                .select('*')
+                .select(`
+                    *,
+                    created_by,
+                    ticket_id,
+                    status,
+                    thread_type
+                `)
                 .eq('ticket_id', ticketId)
                 .is('deleted', false)
 
-            if (options?.status) {
-                query = query.eq('status', options.status)
-            }
-
-            if (options?.thread_type) {
-                query = query.eq('thread_type', options.thread_type)
-            }
+            console.log('Building query for ticket:', {
+                ticketId,
+                options,
+                table: 'ticket_threads',
+                filters: {
+                    ticket_id: ticketId,
+                    deleted: false,
+                    ...(options?.status && { status: options.status }),
+                    ...(options?.thread_type && { thread_type: options.thread_type })
+                }
+            })
 
             if (options?.limit) {
                 query = query.limit(options.limit)
@@ -120,6 +131,13 @@ export class ThreadService {
             const { data, error } = await query.order('created_at', { ascending: false })
 
             if (error) throw error
+
+            console.log('ThreadService.getThreads response:', {
+                ticketId,
+                options,
+                data,
+                error
+            })
 
             return { data: data as Thread[], error: null }
         } catch (error) {
@@ -211,7 +229,7 @@ export class ThreadService {
      */
     static async addMessage(threadId: string, data: {
         content: string
-        parent_id?: string
+        message_type: 'customer' | 'agent' | 'system' | 'ai'
     }) {
         try {
             const { data: { user }, error: sessionError } = await supabase.auth.getUser()
@@ -231,7 +249,7 @@ export class ThreadService {
 
             if (threadError) throw threadError
 
-            // Add message
+            // Create message
             const { data: note, error: noteError } = await supabase
                 .from('ticket_notes')
                 .insert([{
@@ -239,15 +257,16 @@ export class ThreadService {
                     ticket_id: thread.ticket_id,
                     content: data.content,
                     created_by: user.id,
-                    parent_id: data.parent_id,
-                    message_type: thread.thread_type === 'ai_initiated' ? 'ai' : 
-                                thread.thread_type === 'agent_initiated' ? 'agent' : 'customer',
-                    is_internal: false,
-                    metadata: {
-                        ai_processed: false
-                    }
+                    message_type: data.message_type,
+                    is_internal: false
                 }])
-                .select()
+                .select(`
+                    *,
+                    profiles (
+                        full_name,
+                        role
+                    )
+                `)
                 .single()
 
             if (noteError) throw noteError

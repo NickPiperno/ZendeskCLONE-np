@@ -109,15 +109,10 @@ Description: Implementing a threaded conversation system with AI-ready infrastru
     src/modules/tickets/
     ├─ components/
     │  ├─ thread/
-    │  │  ├─ ThreadList.tsx
     │  │  ├─ ThreadView.tsx
     │  │  └─ MessageComposer.tsx
     ```
-- [x] Component Implementation
-  - [x] ThreadList.tsx
-    - [x] Skeuomorphic card design
-    - [x] Real-time updates integration
-    - [x] Loading states
+- [x] Component Implementatio
   - [x] ThreadView.tsx
     - [x] Threaded conversation layout
     - [x] Message grouping

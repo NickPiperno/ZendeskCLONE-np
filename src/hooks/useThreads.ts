@@ -26,12 +26,6 @@ type CreateThreadVars = z.infer<typeof createThreadSchema> & { ticketId: string 
 type UpdateThreadVars = z.infer<typeof updateThreadSchema> & { threadId: string }
 type CreateMessageVars = z.infer<typeof createMessageSchema> & { threadId: string }
 
-interface RealtimeThreadPayload {
-    new: Thread
-    old: Thread
-    eventType: 'INSERT' | 'UPDATE' | 'DELETE'
-}
-
 interface RealtimeNotePayload {
     new: ThreadNote
     old: ThreadNote
@@ -69,8 +63,7 @@ export function useThreads(options: UseThreadsOptions = {}) {
                 schema: 'public',
                 table: 'tickets',
                 filter: `id=eq.${options.ticketId}`
-            }, (payload) => {
-                console.log('Received ticket change:', payload)
+            }, () => {
                 queryClient.invalidateQueries({
                     queryKey: threadKeys.list(options)
                 })
@@ -81,8 +74,7 @@ export function useThreads(options: UseThreadsOptions = {}) {
                 schema: 'public',
                 table: 'ticket_threads',
                 filter: `ticket_id=eq.${options.ticketId}`
-            }, (payload: RealtimeThreadPayload) => {
-                console.log('Received thread change:', payload)
+            }, () => {
                 queryClient.invalidateQueries({
                     queryKey: threadKeys.list(options)
                 })
@@ -93,14 +85,30 @@ export function useThreads(options: UseThreadsOptions = {}) {
                 schema: 'public',
                 table: 'ticket_notes',
                 filter: `ticket_id=eq.${options.ticketId}`
-            }, (payload: RealtimeNotePayload) => {
+            }, async (payload: RealtimeNotePayload) => {
                 console.log('Received note change:', payload)
-                queryClient.invalidateQueries({
-                    queryKey: threadKeys.list(options)
-                })
+
+                // Force refetch all thread data
+                if (payload.eventType === 'INSERT' && payload.new.thread_id) {
+                    // Invalidate both the list and the specific thread
+                    await Promise.all([
+                        queryClient.invalidateQueries({
+                            queryKey: threadKeys.list(options)
+                        }),
+                        queryClient.invalidateQueries({
+                            queryKey: threadKeys.detail(payload.new.thread_id)
+                        })
+                    ])
+
+                    // Force refetch the specific thread
+                    await queryClient.fetchQuery({
+                        queryKey: threadKeys.detail(payload.new.thread_id),
+                        queryFn: () => ThreadAPI.getThread(payload.new.thread_id)
+                    })
+                }
             })
 
-        // Initial subscription
+        // Enable real-time for this channel
         channel.subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
                 console.log('Successfully subscribed to realtime events')

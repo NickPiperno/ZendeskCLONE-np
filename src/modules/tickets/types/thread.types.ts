@@ -39,7 +39,6 @@ export interface ThreadNote {
     ticket_id: string
     content: string
     created_by: string
-    parent_id?: string
     message_type: MessageType
     is_internal: boolean
     metadata?: {
@@ -107,7 +106,6 @@ export const threadNoteSchema = z.object({
     ticket_id: z.string().uuid(),
     content: z.string(),
     created_by: z.string().uuid(),
-    parent_id: z.string().uuid().optional(),
     message_type: z.enum(['customer', 'agent', 'system', 'ai']),
     is_internal: z.boolean(),
     metadata: z.object({
@@ -158,7 +156,7 @@ export const updateThreadSchema = z.object({
 
 export const createMessageSchema = z.object({
     content: z.string().min(1),
-    parent_id: z.string().uuid().optional()
+    message_type: messageTypeSchema
 })
 
 export const updateMessageSchema = z.object({

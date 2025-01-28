@@ -7,7 +7,7 @@ import type { Ticket, TicketStatus, TicketPriority } from '../types/ticket.types
 import { Checkbox } from '@/ui/components/checkbox'
 import { supabase } from '@/services/supabase'
 import { useAuth } from '@/lib/auth/AuthContext'
-import { ThreadList } from './thread/ThreadList'
+import { ThreadView } from './thread/ThreadView'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ui/components/dialog'
 import type { Skill, SkillCategory } from '@/modules/teams/types/team.types'
 import { TeamService } from '@/services/teams'
@@ -59,11 +59,26 @@ function ThreadDialog({ ticketId, open, onOpenChange }: ThreadDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Thread Management</DialogTitle>
+        <DialogHeader className="pb-4 border-b">
+          <DialogTitle className="flex items-center gap-2">
+            <svg 
+              className="w-5 h-5 text-primary" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" 
+              />
+            </svg>
+            Thread Management
+          </DialogTitle>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto">
-          <ThreadList ticketId={ticketId} />
+        <div className="flex-1 overflow-y-auto px-1 py-4">
+          <ThreadView ticketId={ticketId} />
         </div>
       </DialogContent>
     </Dialog>

@@ -4,8 +4,7 @@ import { ChevronLeft } from 'lucide-react'
 import type { CustomerTicket } from '../types/ticket.types'
 import { TicketCard } from './TicketCard'
 import { CustomerTicketTimeline } from './CustomerTicketTimeline'
-import { ThreadList } from './thread/ThreadList'
-import { MessageComposer } from './thread/MessageComposer'
+import { ThreadView } from './thread/ThreadView'
 
 interface CustomerTicketDetailProps {
   ticket: CustomerTicket
@@ -36,10 +35,7 @@ export function CustomerTicketDetail({ ticket, onBack }: CustomerTicketDetailPro
         </TabsList>
 
         <TabsContent value="threads" className="space-y-6">
-          <ThreadList ticketId={ticket.id} />
-          <div className="border-t pt-6">
-            <MessageComposer ticketId={ticket.id} threadId={ticket.id} />
-          </div>
+          <ThreadView ticketId={ticket.id} />
         </TabsContent>
 
         <TabsContent value="timeline">

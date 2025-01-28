@@ -535,4 +535,96 @@ BEGIN
     ) THEN
         CREATE PUBLICATION supabase_realtime;
     END IF;
+END $$;
+
+-- Add RLS policies for ticket_threads
+ALTER TABLE public.ticket_threads ENABLE ROW LEVEL SECURITY;
+
+-- Policy for agents to view threads of tickets assigned to them
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Agents can view threads of assigned tickets' AND tablename = 'ticket_threads') THEN
+        CREATE POLICY "Agents can view threads of assigned tickets" ON public.ticket_threads
+            FOR SELECT
+            USING (
+                EXISTS (
+                    SELECT 1 FROM public.tickets t
+                    WHERE t.id = ticket_id
+                    AND t.assigned_to = auth.uid()
+                    AND NOT t.deleted
+                )
+            );
+    END IF;
+END $$;
+
+-- Policy for agents to create threads on assigned tickets
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Agents can create threads on assigned tickets' AND tablename = 'ticket_threads') THEN
+        CREATE POLICY "Agents can create threads on assigned tickets" ON public.ticket_threads
+            FOR INSERT
+            WITH CHECK (
+                EXISTS (
+                    SELECT 1 FROM public.tickets t
+                    WHERE t.id = ticket_id
+                    AND t.assigned_to = auth.uid()
+                    AND NOT t.deleted
+                )
+            );
+    END IF;
+END $$;
+
+-- Policy for agents to update threads on assigned tickets
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Agents can update threads on assigned tickets' AND tablename = 'ticket_threads') THEN
+        CREATE POLICY "Agents can update threads on assigned tickets" ON public.ticket_threads
+            FOR UPDATE
+            USING (
+                EXISTS (
+                    SELECT 1 FROM public.tickets t
+                    WHERE t.id = ticket_id
+                    AND t.assigned_to = auth.uid()
+                    AND NOT t.deleted
+                )
+            );
+    END IF;
+END $$;
+
+-- Add RLS policies for ticket_notes
+DO $$ 
+BEGIN
+    -- Drop existing policies first
+    DROP POLICY IF EXISTS "Agents can create notes on threads" ON public.ticket_notes;
+    DROP POLICY IF EXISTS "Agents can view notes on thread" ON public.ticket_notes;
+
+    -- Create new policies
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Agents can create notes on threads' AND tablename = 'ticket_notes') THEN
+        CREATE POLICY "Agents can create notes on threads"
+            ON public.ticket_notes FOR INSERT
+            WITH CHECK (
+                EXISTS (
+                    SELECT 1 FROM public.ticket_threads t
+                    JOIN public.tickets tk ON tk.id = t.ticket_id
+                    WHERE t.id = ticket_notes.thread_id
+                    AND tk.assigned_to = auth.uid()
+                    AND NOT t.deleted
+                )
+                AND created_by = auth.uid()
+            );
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Agents can view notes on thread' AND tablename = 'ticket_notes') THEN
+        CREATE POLICY "Agents can view notes on thread"
+            ON public.ticket_notes FOR SELECT
+            USING (
+                EXISTS (
+                    SELECT 1 FROM public.ticket_threads t
+                    JOIN public.tickets tk ON tk.id = t.ticket_id
+                    WHERE t.id = ticket_notes.thread_id
+                    AND tk.assigned_to = auth.uid()
+                    AND NOT t.deleted
+                )
+            );
+    END IF;
 END $$; 

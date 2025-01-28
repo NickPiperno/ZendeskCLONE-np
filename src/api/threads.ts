@@ -73,7 +73,6 @@ export class ThreadAPI {
      */
     static async addMessage(threadId: string, data: {
         content: string
-        parent_id?: string
     }) {
         const validatedData = createMessageSchema.parse(data)
         const { data: message, error } = await ThreadService.addMessage(threadId, validatedData)

@@ -8,6 +8,8 @@ import React, { useState } from 'react'
 import { Button } from '@/ui/components/button'
 import { Textarea } from '@/ui/components/textarea'
 import { useThreads } from '@/hooks/useThreads'
+import { useAuth } from '@/lib/auth/AuthContext'
+import type { MessageType } from '../../types/thread.types'
 
 interface MessageComposerProps {
   threadId?: string
@@ -24,27 +26,53 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const [content, setContent] = useState('')
   const [error, setError] = useState('')
-  const { createThread, addMessage } = useThreads({ ticketId })
+  const { createThread, addMessage, threads } = useThreads({ ticketId })
+  const { profile } = useAuth()
   const isSubmitting = createThread.isPending || addMessage.isPending
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Determine message type based on user role
+  const getMessageType = (): MessageType => {
+    if (!profile) return 'customer' // Default to customer if no profile
+    switch (profile.role) {
+      case 'admin':
+      case 'agent':
+        return 'agent'
+      default:
+        return 'customer'
+    }
+  }
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (!content.trim()) return
 
     try {
       if (!threadId) {
-        // Create new thread
-        await createThread.mutate({
-          ticketId,
-          title: content.slice(0, 100),
-          initial_message: content,
-          thread_type: 'customer_initiated'
-        })
+        // Check if there's already a thread for this ticket
+        const existingThread = threads?.find(t => !t.deleted)
+        
+        if (existingThread) {
+          // Use existing thread instead of creating a new one
+          await addMessage.mutate({
+            threadId: existingThread.id,
+            content,
+            message_type: getMessageType()
+          })
+        } else {
+          // Create new thread only if none exists
+          await createThread.mutate({
+            ticketId,
+            title: content.slice(0, 100),
+            initial_message: content,
+            thread_type: getMessageType() === 'customer' ? 'customer_initiated' : 'agent_initiated'
+          })
+        }
       } else {
         // Add message to existing thread
         await addMessage.mutate({
           threadId,
-          content
+          content,
+          message_type: getMessageType()
         })
       }
 
@@ -58,11 +86,19 @@ export function MessageComposer({
     }
   }
 
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
+        onKeyDown={handleKeyPress}
         placeholder={placeholder}
         className="min-h-[100px]"
       />

@@ -1,5 +1,4 @@
 import { Badge } from '@/ui/components/badge'
-import { Button } from '@/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/components/card'
 import { useThreads } from '@/hooks/useThreads'
 import type { CustomerTicket } from '../types/ticket.types'
@@ -37,7 +36,10 @@ export function TicketCard({ ticket, onSelect }: TicketCardProps) {
   const latestThread = getLatestThread()
 
   return (
-    <Card className="hover:bg-accent/50 transition-colors">
+    <Card 
+      className="hover:bg-accent/50 transition-colors cursor-pointer"
+      onClick={() => onSelect(ticket.id)}
+    >
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -81,14 +83,11 @@ export function TicketCard({ ticket, onSelect }: TicketCardProps) {
           ) : null}
         </div>
 
-        <div className="flex justify-between items-center mt-4">
+        <div className="flex justify-end items-center mt-4">
           <div className="text-sm text-muted-foreground">
             Created: {new Date(ticket.created_at).toLocaleDateString()}
             {ticket.has_agent && " • Assigned to agent"}
           </div>
-          <Button variant="ghost" onClick={() => onSelect(ticket.id)}>
-            View Timeline
-          </Button>
         </div>
       </CardContent>
     </Card>
