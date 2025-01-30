@@ -15,6 +15,7 @@ export function AgentDashboardPage() {
   const navigate = useNavigate()
   const [selectedStatus, setSelectedStatus] = useState<TicketStatus | 'all'>('all')
   const [selectedPriority, setSelectedPriority] = useState<'all' | 'high' | 'urgent'>('all')
+  const [selectedTimeRange, setSelectedTimeRange] = useState<'all' | '24h' | '7d'>('all')
   
   useEffect(() => {
     // Verify user is an agent or admin
@@ -32,6 +33,16 @@ export function AgentDashboardPage() {
 
     checkRole()
   }, [user, navigate])
+
+  // Calculate date filters based on timeRange
+  const getDateFilters = () => {
+    if (selectedTimeRange === 'all') return {}
+    
+    const now = new Date()
+    const days = selectedTimeRange === '24h' ? 1 : 7
+    const cutoffDate = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000))
+    return { updatedAfter: cutoffDate }
+  }
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -98,6 +109,34 @@ export function AgentDashboardPage() {
               Urgent
             </Button>
           </div>
+
+          {/* Time Range Filters */}
+          <div>
+            <span className="text-sm font-medium mr-3">Time:</span>
+            <Button
+              variant={selectedTimeRange === 'all' ? 'default' : 'outline'}
+              onClick={() => setSelectedTimeRange('all')}
+              size="sm"
+            >
+              All Time
+            </Button>
+            <Button
+              variant={selectedTimeRange === '24h' ? 'default' : 'outline'}
+              onClick={() => setSelectedTimeRange('24h')}
+              size="sm"
+              className="ml-1"
+            >
+              24h
+            </Button>
+            <Button
+              variant={selectedTimeRange === '7d' ? 'default' : 'outline'}
+              onClick={() => setSelectedTimeRange('7d')}
+              size="sm"
+              className="ml-1"
+            >
+              7 Days
+            </Button>
+          </div>
         </div>
       </div>
       
@@ -107,7 +146,8 @@ export function AgentDashboardPage() {
           status: selectedStatus === 'all' ? undefined : selectedStatus,
           priority: selectedPriority === 'all' ? undefined : selectedPriority,
           assignedTo: user?.id,
-          assignmentStatus: 'assigned'
+          assignmentStatus: 'assigned',
+          ...getDateFilters()
         }}
       />
     </div>

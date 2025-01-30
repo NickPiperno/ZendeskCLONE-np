@@ -1,11 +1,173 @@
-title,content,category_id,author_id,is_published,deleted
-Welcome to Our Platform,A comprehensive guide to getting started with our platform. Learn about the basic features and how to navigate the interface.,7e9d02c7-495d-48b8-8c74-5aae73e9acd5,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-How to Reset Your Password,Step-by-step guide to resetting your password and securing your account.,0a3aa62e-ff09-417b-ad08-1cab8da516d3,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-Understanding Your Billing Cycle,Learn about billing cycles payment methods and how to manage your subscriptions.,c80b1ea3-4430-4e04-ada4-73ae2b59f507,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-Two-Factor Authentication Setup,Enhance your account security by enabling two-factor authentication.,0a3aa62e-ff09-417b-ad08-1cab8da516d3,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-Common Login Issues,Solutions to frequently encountered login problems and access issues.,794cf2d7-0429-498b-991f-7eede4cd98d4,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-Using the Search Feature,A detailed guide on how to effectively use the platform's search functionality.,608ee611-cce3-42ad-a1e7-ca2302c871fd,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-API Authentication Guide,Learn how to authenticate your API requests and manage API keys.,2812f907-1729-421c-9885-51d00d227b95,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-Best Practices for Data Management,Guidelines for managing and organizing your data effectively.,779bfb5a-ee2c-4730-8b91-caa3d7c57d22,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-Latest Platform Updates,Recent changes improvements and new features added to the platform.,84e77b11-995b-4463-a89b-91e0b8a38ec2,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
-Frequently Asked Questions,Answers to the most common questions about our platform and services.,64d0415c-489d-41f9-b7de-00d09ce2e4f0,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,FALSE
+title,content,category_id,author_id,is_published,view_count,helpful_count,not_helpful_count,deleted
+Welcome to Our Platform,"# Welcome to Our Platform
+
+Welcome to our comprehensive platform guide! This article will help you get started and make the most of our services.
+
+## Getting Started
+1. **Dashboard Overview**
+   - Navigation bar features and quick access menu
+   - Customizing your dashboard layout
+   - Understanding key metrics and indicators
+
+2. **Key Features**
+   - Project management tools
+   - Collaboration spaces
+   - Analytics dashboard
+   - Integration capabilities
+
+3. **First Steps**
+   - Setting up your profile
+   - Configuring notifications
+   - Connecting with team members
+   - Creating your first project
+
+## Tips for Success
+- Utilize the search function to quickly find resources
+- Bookmark frequently accessed pages
+- Enable desktop notifications for important updates
+- Join our community forums for peer support
+
+Need additional help? Contact our support team or explore our other knowledge base articles.",7e9d02c7-495d-48b8-8c74-5aae73e9acd5,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,0,0,0,FALSE
+Two-Factor Authentication Setup,"# Setting Up Two-Factor Authentication
+
+Enhance your account security by enabling two-factor authentication (2FA). This guide walks you through the setup process.
+
+## Why Use 2FA?
+- Additional layer of security beyond passwords
+- Protection against unauthorized access
+- Industry standard security practice
+- Compliance with security requirements
+
+## Setup Process
+1. **Access Security Settings**
+   - Log into your account
+   - Navigate to Settings > Security
+   - Select ""Enable 2FA""
+
+2. **Choose Your 2FA Method**
+   - Authenticator App (recommended)
+   - SMS verification
+   - Security keys (YubiKey, etc.)
+
+3. **Authenticator App Setup**
+   - Download a supported authenticator app
+   - Scan the QR code
+   - Enter the verification code
+   - Save backup codes
+
+## Important Notes
+- Store backup codes securely
+- Update phone number if using SMS
+- Multiple 2FA methods recommended
+- Contact support if locked out
+
+Remember to regularly review your security settings and update them as needed.",0a3aa62e-ff09-417b-ad08-1cab8da516d3,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,0,0,0,FALSE
+API Authentication Guide,"# API Authentication Guide
+
+Learn how to securely authenticate your API requests and manage your API keys effectively.
+
+## Authentication Methods
+1. **API Key Authentication**
+   - Generating API keys
+   - Key rotation best practices
+   - Rate limiting considerations
+   - Environment-specific keys
+
+2. **OAuth 2.0 Integration**
+   - Authorization flow types
+   - Token management
+   - Refresh token handling
+   - Scope configuration
+
+3. **Security Best Practices**
+   - Secure key storage
+   - HTTPS requirement
+   - IP whitelisting
+   - Request signing
+
+## Implementation Examples
+```javascript
+// Example API request with key
+const response = await fetch('https://api.example.com/v1/data', {
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  }
+});
+```
+
+## Error Handling
+- Common authentication errors
+- Troubleshooting steps
+- Rate limit responses
+- Security incident handling
+
+Keep your API keys secure and never share them in public repositories or client-side code.",2812f907-1729-421c-9885-51d00d227b95,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,0,0,0,FALSE
+Understanding Your Billing Cycle,"# Understanding Your Billing Cycle
+
+A comprehensive guide to managing your billing and subscription settings.
+
+## Billing Basics
+1. **Billing Cycles Explained**
+   - Monthly vs Annual billing
+   - Billing date determination
+   - Prorated charges
+   - Credit application
+
+2. **Payment Methods**
+   - Supported payment options
+   - Adding/updating payment methods
+   - Auto-pay settings
+   - Payment security
+
+3. **Subscription Management**
+   - Viewing current plan
+   - Upgrading/downgrading
+   - User license management
+   - Add-on services
+
+## Common Questions
+- How to change billing frequency
+- Managing multiple subscriptions
+- Handling failed payments
+- Updating billing information
+
+## Best Practices
+- Enable automatic payments
+- Keep payment methods updated
+- Review monthly statements
+- Monitor user license usage",c80b1ea3-4430-4e04-ada4-73ae2b59f507,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,0,0,0,FALSE
+Troubleshooting Common Issues,"# Troubleshooting Common Issues
+
+A guide to resolving frequently encountered platform issues.
+
+## Login Problems
+1. **Account Access**
+   - Password reset process
+   - Two-factor authentication issues
+   - Session management
+   - Browser compatibility
+
+2. **Performance Issues**
+   - Clearing cache
+   - Browser updates
+   - Network connectivity
+   - System requirements
+
+3. **Data Sync**
+   - Sync status checking
+   - Force sync options
+   - Conflict resolution
+   - Offline mode behavior
+
+## Quick Fixes
+- Clear browser cache
+- Update browser/app
+- Check network connection
+- Verify system requirements
+
+## When to Contact Support
+- Persistent login issues
+- Data discrepancies
+- Security concerns
+- Performance problems",794cf2d7-0429-498b-991f-7eede4cd98d4,b4579da1-2a92-4a30-bb0e-d5b5f232a785,TRUE,0,0,0,FALSE

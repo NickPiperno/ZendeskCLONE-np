@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import ReactMarkdown from 'react-markdown'
 import { knowledgeBaseService } from '@/services/knowledge-base'
 import { Card, CardHeader, CardTitle, CardContent } from '@/ui/components/card'
 import { Button } from '@/ui/components/button'
@@ -67,7 +68,7 @@ export function ArticleView({ articleId, onBack }: ArticleViewProps) {
           </div>
         </CardHeader>
         <CardContent className="prose prose-sm dark:prose-invert max-w-none">
-          {article.content}
+          <ReactMarkdown>{article.content}</ReactMarkdown>
         </CardContent>
       </Card>
 

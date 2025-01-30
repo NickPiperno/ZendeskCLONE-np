@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth/AuthContext'
 import { Navigate } from 'react-router-dom'
 
 type AssignmentStatus = 'all' | 'assigned' | 'unassigned'
+type TimeRange = '24h' | '7d' | '30d' | 'all'
 
 interface Agent {
   id: string
@@ -26,7 +27,8 @@ export function AdminTicketsPage() {
     assignmentStatus: 'all' as AssignmentStatus,
     status: undefined as TicketStatus | undefined,
     priority: undefined as TicketPriority | undefined,
-    assignedTo: undefined as string | undefined
+    assignedTo: undefined as string | undefined,
+    timeRange: 'all' as TimeRange
   })
 
   // Redirect non-admin/agent users to customer tickets page
@@ -74,8 +76,22 @@ export function AdminTicketsPage() {
       assignmentStatus: 'all',
       status: undefined,
       priority: undefined,
-      assignedTo: undefined
+      assignedTo: undefined,
+      timeRange: 'all'
     })
+  }
+
+  // Calculate date filters based on timeRange
+  const getDateFilters = () => {
+    if (filters.timeRange === 'all') return {}
+    
+    const now = new Date()
+    const days = filters.timeRange === '24h' ? 1 : 
+                filters.timeRange === '7d' ? 7 : 
+                filters.timeRange === '30d' ? 30 : 0
+    
+    const cutoffDate = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000))
+    return { updatedAfter: cutoffDate }
   }
 
   return (
@@ -183,6 +199,22 @@ export function AdminTicketsPage() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Time Range Filter */}
+          <div className="space-y-2">
+            <Label>Time Range</Label>
+            <Select value={filters.timeRange} onValueChange={(value) => handleFilterChange('timeRange', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select time range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="24h">Last 24 Hours</SelectItem>
+                <SelectItem value="7d">Last 7 Days</SelectItem>
+                <SelectItem value="30d">Last 30 Days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
       
@@ -191,7 +223,8 @@ export function AdminTicketsPage() {
           status: filters.status,
           priority: filters.priority,
           assignmentStatus: filters.assignmentStatus === 'all' ? undefined : filters.assignmentStatus,
-          assignedTo: filters.assignedTo
+          assignedTo: filters.assignedTo,
+          ...getDateFilters()
         }}
       />
     </div>

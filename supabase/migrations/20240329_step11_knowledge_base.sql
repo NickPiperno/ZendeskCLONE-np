@@ -1,3 +1,81 @@
+-- Create document type enum if it doesn't exist
+DO $$ BEGIN
+    CREATE TYPE public.document_type AS ENUM ('kb_article', 'ticket', 'team');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- Create AI documents table with vector support
+CREATE TABLE IF NOT EXISTS public.ai_documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    embedding vector(1536),
+    document_type document_type NOT NULL,
+    reference_id UUID NOT NULL,
+    title TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    -- Add check constraints to ensure reference_id exists in the correct table
+    CONSTRAINT check_kb_article CHECK (
+        document_type != 'kb_article' OR 
+        EXISTS (SELECT 1 FROM public.kb_articles WHERE id = reference_id)
+    ),
+    CONSTRAINT check_ticket CHECK (
+        document_type != 'ticket' OR 
+        EXISTS (SELECT 1 FROM public.tickets WHERE id = reference_id)
+    ),
+    CONSTRAINT check_team CHECK (
+        document_type != 'team' OR 
+        EXISTS (SELECT 1 FROM public.teams WHERE id = reference_id)
+    )
+);
+
+-- Create trigger function to handle cascading deletes
+CREATE OR REPLACE FUNCTION handle_ai_document_reference_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM public.ai_documents
+    WHERE reference_id = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers for each referenced table
+DROP TRIGGER IF EXISTS trigger_kb_article_delete ON public.kb_articles;
+CREATE TRIGGER trigger_kb_article_delete
+    BEFORE DELETE ON public.kb_articles
+    FOR EACH ROW
+    EXECUTE FUNCTION handle_ai_document_reference_delete();
+
+DROP TRIGGER IF EXISTS trigger_ticket_delete ON public.tickets;
+CREATE TRIGGER trigger_ticket_delete
+    BEFORE DELETE ON public.tickets
+    FOR EACH ROW
+    EXECUTE FUNCTION handle_ai_document_reference_delete();
+
+DROP TRIGGER IF EXISTS trigger_team_delete ON public.teams;
+CREATE TRIGGER trigger_team_delete
+    BEFORE DELETE ON public.teams
+    FOR EACH ROW
+    EXECUTE FUNCTION handle_ai_document_reference_delete();
+
+-- Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_ai_documents_reference ON public.ai_documents(reference_id, document_type);
+
+-- Enable RLS
+ALTER TABLE public.ai_documents ENABLE ROW LEVEL SECURITY;
+
+-- AI documents policies
+CREATE POLICY "Service role can manage AI documents"
+    ON public.ai_documents FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
+-- Grant necessary permissions to service role
+GRANT ALL ON public.ai_documents TO service_role;
+GRANT USAGE ON SEQUENCE public.ai_documents_id_seq TO service_role;
+
 -- Create knowledge base categories table
 CREATE TABLE IF NOT EXISTS public.kb_categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

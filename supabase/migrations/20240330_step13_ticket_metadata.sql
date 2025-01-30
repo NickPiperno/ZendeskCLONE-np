@@ -18,21 +18,72 @@ DROP INDEX IF EXISTS idx_tickets_metadata;
 -- Create GIN index for efficient JSONB querying
 CREATE INDEX idx_tickets_metadata ON public.tickets USING gin (metadata);
 
--- Create function to validate metadata structure
+-- Create function to validate ticket metadata
 CREATE OR REPLACE FUNCTION public.validate_ticket_metadata()
 RETURNS trigger
 SECURITY DEFINER
 SET search_path = public
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    v_user_id UUID;
 BEGIN
+    -- Get current user ID safely
+    v_user_id := COALESCE(auth.uid(), NEW.user_id);
+
+    -- Initialize metadata if NULL
+    IF NEW.metadata IS NULL THEN
+        NEW.metadata := '{}'::jsonb;
+    END IF;
+
     -- Ensure metadata is an object
     IF NOT (NEW.metadata @> '{}'::jsonb) THEN
         RAISE EXCEPTION 'Metadata must be a JSON object';
     END IF;
 
-    -- Add any additional validation rules here
-    -- Example: Ensure specific fields are of correct type
+    -- Initialize current_state if not present
+    IF NOT (NEW.metadata ? 'current_state') THEN
+        NEW.metadata := jsonb_set(
+            NEW.metadata,
+            '{current_state}',
+            jsonb_build_object(
+                'name', NEW.status::text,
+                'entered_at', CURRENT_TIMESTAMP,
+                'updated_by', v_user_id
+            )
+        );
+    END IF;
+
+    -- Initialize state_transitions if not present
+    IF NOT (NEW.metadata ? 'state_transitions') THEN
+        NEW.metadata := jsonb_set(
+            NEW.metadata,
+            '{state_transitions}',
+            '[]'::jsonb
+        );
+    END IF;
+
+    -- Validate fields only if they exist
+    IF (NEW.metadata ? 'status_history' AND NOT jsonb_typeof(NEW.metadata->'status_history') = 'array') THEN
+        RAISE EXCEPTION 'status_history must be an array';
+    END IF;
+
+    IF (NEW.metadata ? 'last_updated_by' AND NOT jsonb_typeof(NEW.metadata->'last_updated_by') = 'string') THEN
+        RAISE EXCEPTION 'last_updated_by must be a string';
+    END IF;
+
+    IF (NEW.metadata ? 'resolution_time' AND NOT jsonb_typeof(NEW.metadata->'resolution_time') = 'number') THEN
+        RAISE EXCEPTION 'resolution_time must be a number';
+    END IF;
+
+    IF (NEW.metadata ? 'security_level' AND NOT jsonb_typeof(NEW.metadata->'security_level') = 'string') THEN
+        RAISE EXCEPTION 'security_level must be a string';
+    END IF;
+
+    IF (NEW.metadata ? 'security_classification' AND NOT jsonb_typeof(NEW.metadata->'security_classification') = 'string') THEN
+        RAISE EXCEPTION 'security_classification must be a string';
+    END IF;
+
     IF (NEW.metadata ? 'source' AND NOT jsonb_typeof(NEW.metadata->'source') = 'string') THEN
         RAISE EXCEPTION 'source field must be a string';
     END IF;
@@ -42,6 +93,65 @@ BEGIN
     END IF;
 
     RETURN NEW;
+END;
+$$;
+
+-- Create function to update ticket state
+CREATE OR REPLACE FUNCTION public.update_ticket_state(
+    p_ticket_id UUID,
+    p_new_state TEXT,
+    p_user_id UUID
+)
+RETURNS VOID
+SECURITY DEFINER
+SET search_path = public
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_current_state JSONB;
+    v_transitions JSONB;
+    v_timestamp TIMESTAMPTZ;
+BEGIN
+    -- Get current timestamp
+    v_timestamp := NOW();
+
+    -- Get current state and transitions
+    SELECT 
+        metadata->'current_state',
+        metadata->'state_transitions'
+    INTO v_current_state, v_transitions
+    FROM public.tickets
+    WHERE id = p_ticket_id;
+
+    -- Initialize arrays if null
+    IF v_transitions IS NULL THEN
+        v_transitions := '[]'::jsonb;
+    END IF;
+
+    -- Create new transition
+    v_transitions := v_transitions || jsonb_build_object(
+        'from_state', COALESCE(v_current_state->>'name', 'none'),
+        'to_state', p_new_state,
+        'timestamp', v_timestamp,
+        'user_id', p_user_id
+    );
+
+    -- Update ticket metadata
+    UPDATE public.tickets
+    SET metadata = jsonb_set(
+        jsonb_set(
+            COALESCE(metadata, '{}'::jsonb),
+            '{state_transitions}',
+            v_transitions
+        ),
+        '{current_state}',
+        jsonb_build_object(
+            'name', p_new_state,
+            'entered_at', v_timestamp,
+            'updated_by', p_user_id
+        )
+    )
+    WHERE id = p_ticket_id;
 END;
 $$;
 
@@ -117,4 +227,6 @@ $$;
 
 -- Grant necessary permissions
 GRANT ALL ON FUNCTION public.validate_ticket_metadata() TO authenticated;
-GRANT ALL ON FUNCTION public.validate_ticket_metadata() TO service_role; 
+GRANT ALL ON FUNCTION public.validate_ticket_metadata() TO service_role;
+GRANT EXECUTE ON FUNCTION public.update_ticket_state(UUID, TEXT, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_ticket_state(UUID, TEXT, UUID) TO service_role; 

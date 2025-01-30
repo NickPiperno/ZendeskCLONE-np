@@ -1,0 +1,43 @@
+graph TD
+    subgraph Input
+        A[User Input] --> B[Text/Voice]
+        B --> C[Input Processor Agent]
+    end
+
+    subgraph RAG System
+        C --> D[RAG Agent]
+        D --> |Query| E[(Supabase Vector Store)]
+        E --> |Context| D
+    end
+
+    subgraph Entity Processing
+        D --> F[Entity Recognition Agent]
+        F --> |Entities| G[Task Router Agent]
+    end
+
+    subgraph Domain Agents
+        G --> |Sales Query| H[Sales Agent]
+        G --> |Support Query| I[Support Agent]
+        G --> |Billing Query| J[Billing Agent]
+    end
+
+    subgraph Action Execution
+        H & I & J --> L[Execution Agent]
+        L --> |Validation Failed| M[Error Handler]
+        L --> |Validation Passed| N[(Supabase DB)]
+    end
+
+    subgraph Database
+        N --> |Result| O[Response Generator]
+    end
+
+    subgraph Output
+        O --> P[User Confirmation]
+        P --> |Approved| Q[Success Message]
+        P --> |Rejected| R[Undo Action]
+        R --> N
+    end
+
+    %% Data flow annotations
+    classDef dataFlow fill:#f9f,stroke:#333,stroke-width:2px
+    class E,N dataFlow

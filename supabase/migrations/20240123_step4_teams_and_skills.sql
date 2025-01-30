@@ -6,7 +6,7 @@ CREATE TABLE public.teams (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    name TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
     description TEXT,
     is_active BOOLEAN DEFAULT true,
     deleted BOOLEAN DEFAULT false,
@@ -176,4 +176,10 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.soft_delete_team(UUID) TO authenticated; 
+GRANT EXECUTE ON FUNCTION public.soft_delete_team(UUID) TO authenticated;
+
+-- Grant additional permissions to service role for AI functionality
+GRANT ALL ON public.teams TO service_role;
+GRANT ALL ON public.kb_articles TO service_role;
+GRANT ALL ON public.tickets TO service_role;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO service_role; 

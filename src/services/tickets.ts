@@ -39,6 +39,18 @@ interface AgentSkill {
   user_email: string
 }
 
+// Add type guard at the top of the file after imports
+function isPostgrestError(error: unknown): error is PostgrestError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    'details' in error &&
+    'hint' in error &&
+    'code' in error
+  );
+}
+
 /**
  * Service class for handling ticket operations
  * Includes error handling and logging
@@ -111,16 +123,43 @@ export class TicketService {
 
       console.log('Creating ticket:', { ...ticket, description: '...' })
       
+      const timestamp = new Date()
+      const userId = profile?.role === 'admin' && ticket.user_id ? ticket.user_id : user.id
+
+      // Initialize metadata with required fields
+      const metadata = {
+        current_state: {
+          name: ticket.status || 'open',
+          entered_at: timestamp,
+          updated_by: userId
+        },
+        state_transitions: [{
+          from_state: 'none',
+          to_state: ticket.status || 'open',
+          timestamp: timestamp,
+          user_id: userId
+        }],
+        status_history: [{
+          status: ticket.status || 'open',
+          timestamp: timestamp,
+          user_id: userId
+        }],
+        last_updated_by: userId,
+        source: 'web',
+        sla_level: ticket.priority === 'urgent' ? 'high' : 
+                   ticket.priority === 'high' ? 'medium' : 'standard'
+      }
+      
       // Create the ticket without triggering auto-assignment
       const { data, error } = await supabase
         .from('tickets')
         .insert([{
           ...ticket,
-          // If admin is creating ticket and user_id is provided, use that, otherwise use current user's ID
-          user_id: profile?.role === 'admin' && ticket.user_id ? ticket.user_id : user.id,
+          user_id: userId,
           status: ticket.status || 'open',
           priority: ticket.priority || 'medium',
-          assigned_to: null // Explicitly set to null to prevent auto-assignment
+          assigned_to: null, // Explicitly set to null to prevent auto-assignment
+          metadata // Add the initialized metadata
         }])
         .select()
         .single()
@@ -159,6 +198,12 @@ export class TicketService {
     status?: Ticket['status']
     priority?: Ticket['priority']
     limit?: number
+    // New timestamp filters
+    createdAfter?: Date        // Get tickets created after this date
+    createdBefore?: Date       // Get tickets created before this date
+    updatedAfter?: Date        // Get tickets updated after this date
+    updatedBefore?: Date       // Get tickets updated before this date
+    lastUpdateOlderThan?: number // Get tickets not updated in X days
   }) {
     try {
       // Validate user session
@@ -197,6 +242,30 @@ export class TicketService {
       if (options?.priority) {
         query = query.eq('priority', options.priority)
       }
+
+      // New timestamp filters
+      if (options?.createdAfter) {
+        query = query.gte('created_at', options.createdAfter.toISOString())
+      }
+
+      if (options?.createdBefore) {
+        query = query.lte('created_at', options.createdBefore.toISOString())
+      }
+
+      if (options?.updatedAfter) {
+        query = query.gte('updated_at', options.updatedAfter.toISOString())
+      }
+
+      if (options?.updatedBefore) {
+        query = query.lte('updated_at', options.updatedBefore.toISOString())
+      }
+
+      if (options?.lastUpdateOlderThan) {
+        const cutoffDate = new Date()
+        cutoffDate.setDate(cutoffDate.getDate() - options.lastUpdateOlderThan)
+        query = query.lte('updated_at', cutoffDate.toISOString())
+      }
+
       if (options?.limit) {
         query = query.limit(options.limit)
       }
@@ -401,7 +470,7 @@ export class TicketService {
       
       return data as string | null
     } catch (error) {
-      console.error('Error in findBestAgentMatch:', error instanceof PostgrestError ? error.message : 'Unknown error')
+      console.error('Error in findBestAgentMatch:', isPostgrestError(error) ? error.message : 'Unknown error')
       return null
     }
   }
@@ -441,7 +510,7 @@ export class TicketService {
       console.log('Auto-assignment successful. Agent ID:', matchedAgentId)
       return matchedAgentId
     } catch (error) {
-      console.error('Error in autoAssignTicket:', error instanceof PostgrestError ? {
+      console.error('Error in autoAssignTicket:', isPostgrestError(error) ? {
         message: error.message,
         details: error.details,
         hint: error.hint,

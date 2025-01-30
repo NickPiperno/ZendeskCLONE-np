@@ -1,0 +1,44 @@
+graph TD
+    subgraph Input Processing
+        A[User Input] --> B[Input Processor Agent]
+        B --> C[RAG Agent]
+    end
+
+    subgraph Context & Entity Processing
+        C --> |Query| D[(Vector Store)]
+        D --> |Context| C
+        C --> E[Entity Recognition Agent]
+        E --> F[Task Router Agent]
+    end
+
+    subgraph Domain Agents
+        F --> |KB Query| G[KB Agent]
+        F --> |Ticket Query| H[Ticket Agent]
+        F --> |Team Query| I[Team Agent]
+        
+        G --> G1[Article Operations]
+        G --> G2[Category Management]
+        
+        H --> H1[Ticket Operations]
+        H --> H2[Assignment Logic]
+        
+        I --> I1[Team Operations]
+        I --> I2[Skill Matching]
+    end
+
+    subgraph Execution Layer
+        G1 & G2 & H1 & H2 & I1 & I2 --> J[Execution Agent]
+        J --> |Valid| L[(Supabase DB)]
+        J --> |Invalid| M[Error Handler]
+    end
+
+    subgraph Audit & Response
+        L --> N[Audit Agent]
+        N --> L
+        N --> O[Response Agent]
+        O --> P[User Response]
+    end
+
+    %% Adding key relationships
+    classDef core fill:#f9f,stroke:#333,stroke-width:2px;
+    class C,E,F,J core;

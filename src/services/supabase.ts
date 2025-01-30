@@ -30,7 +30,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
       },
       setItem: (key: string, value: string): Promise<void> => {
         if (!key) return Promise.resolve();
-        cache.set(key, value, 60); // Cache auth for 1 hour
+        cache.set(key, value, 24 * 60); // Cache auth for 24 hours
         return Promise.resolve();
       },
       removeItem: (key: string): Promise<void> => {

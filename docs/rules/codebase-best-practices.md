@@ -32,6 +32,39 @@ auto-crm/
 │  │  │  │  └─ ticket.types.ts   // Ticket-specific types and interfaces
 │  │  │  ├─ pages/
 │  │  │  │  └─ TicketsPage.tsx   // Tickets management view
+│  │  ├─ knowledge-base/         // Knowledge Base module
+│  │  │  ├─ components/
+│  │  │  │  ├─ ArticleList.tsx   // Article listing component
+│  │  │  │  ├─ ArticleView.tsx   // Article viewing component
+│  │  │  │  └─ CategoryList.tsx  // Category navigation
+│  │  │  ├─ hooks/
+│  │  │  │  └─ useKBData.ts      // KB data fetching hooks
+│  │  │  ├─ types/
+│  │  │  │  └─ kb.types.ts       // KB-specific types
+│  │  │  └─ pages/
+│  │  │     ├─ KBPage.tsx        // Main KB page
+│  │  │     └─ ArticlePage.tsx   // Single article page
+│  │  ├─ admin/                  // Admin module
+│  │  │  ├─ components/
+│  │  │  │  ├─ UserList.tsx      // User management
+│  │  │  │  └─ AuditLog.tsx      // System audit logs
+│  │  │  ├─ hooks/
+│  │  │  │  └─ useAdminData.ts   // Admin data operations
+│  │  │  ├─ types/
+│  │  │  │  └─ admin.types.ts    // Admin-specific types
+│  │  │  └─ pages/
+│  │  │     └─ AdminPage.tsx     // Admin dashboard
+│  │  ├─ ai/                     // AI feature module
+│  │  │  ├─ components/          // AI-specific UI components
+│  │  │  │  └─ ChatInterface.tsx // Chat interface component
+│  │  │  ├─ types/              // AI-specific types
+│  │  │  │  ├─ agents.ts        // Agent types (base + domain)
+│  │  │  │  ├─ documents.ts     // AI document types
+│  │  │  │  └─ index.ts         // Type exports
+│  │  │  ├─ services/           // AI service implementations
+│  │  │  │  ├─ agents/          // Agent implementations
+│  │  │  │  └─ vectorstore.ts   // Vector store setup
+│  │  │  └─ hooks/              // AI-specific hooks
 │  │  ├─ settings/
 │  │  │  └─ pages/
 │  │  │     └─ SettingsPage.tsx  // User/system settings
@@ -146,6 +179,11 @@ export interface Ticket {
 1. **Domain-Centric Modules**: Group related pages, components, hooks, types, and logic by feature (e.g., tickets, auth).  
 2. **Single Responsibility**: Keep each file focused. Split code into smaller modules if it grows too large.  
 3. **Shared Components**: Place reusable UI elements in src/ui/components and domain-specific ones in their respective module.
+4. **AI Module Organization**: 
+   - Keep AI-specific code within the `ai` module
+   - Organize agent types and implementations in their respective directories
+   - Use the vector store service for document embeddings and similarity search
+   - Maintain clear separation between AI services and UI components
 
 ---
 

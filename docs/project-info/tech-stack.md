@@ -51,7 +51,9 @@ Based on our [compatibility analysis](./tech-stack-compatibility.md), here are t
 
 ### 8. AI/Chatbot Integrations
 **Selected**: OpenAI + LangChain
-- Robust AI capabilities
+- Using LangChain.js/TS v0.3
+- Packages: @langchain/core, @langchain/community
+- Vector store: Supabase pgvector
 - TypeScript support
 - Knowledge base integration
 

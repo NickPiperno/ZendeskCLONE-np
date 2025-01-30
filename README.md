@@ -94,3 +94,13 @@ src/
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+
+# Environment Variables
+
+The following environment variables are required:
+
+- `VITE_SUPABASE_URL`: Your Supabase project URL
+- `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+- `VITE_OPENAI_API_KEY`: Your OpenAI API key for AI features
+
+Copy `.env.example` to `.env` and fill in your values.

@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth/AuthContext'
 import { Button } from '@/ui/components/button'
+import { AIChat } from '@/modules/ai/components/AIChat'
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -72,6 +73,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       <main className="container mx-auto py-6">
         {children}
       </main>
+
+      <AIChat />
 
       <footer className="border-t py-6 md:py-0">
         <div className="container flex flex-col items-center justify-between gap-4 md:h-14 md:flex-row">

@@ -45,6 +45,16 @@ export function ArticleList({ searchResults, categoryId, onArticleSelect }: Arti
     )
   }
 
+  // Function to get preview text from markdown content
+  const getPreviewText = (content: string) => {
+    // Remove markdown headers
+    const withoutHeaders = content.replace(/^#.*$/gm, '').trim()
+    // Remove markdown formatting
+    const plainText = withoutHeaders.replace(/[#*_`]/g, '').trim()
+    // Get first 200 characters
+    return plainText.slice(0, 200) + (plainText.length > 200 ? '...' : '')
+  }
+
   return (
     <div className="space-y-4">
       {articles.map((article) => (
@@ -65,11 +75,14 @@ export function ArticleList({ searchResults, categoryId, onArticleSelect }: Arti
           </CardHeader>
           <CardContent>
             <div 
-              className="text-sm text-muted-foreground line-clamp-2 [&_mark]:bg-yellow-200 dark:[&_mark]:bg-yellow-500/20"
-              dangerouslySetInnerHTML={{ 
-                __html: 'content_preview' in article ? article.content_preview : article.content 
-              }}
-            />
+              className="text-sm text-muted-foreground line-clamp-2"
+            >
+              {'content_preview' in article ? (
+                <div dangerouslySetInnerHTML={{ __html: article.content_preview }} />
+              ) : (
+                getPreviewText(article.content)
+              )}
+            </div>
           </CardContent>
         </Card>
       ))}
