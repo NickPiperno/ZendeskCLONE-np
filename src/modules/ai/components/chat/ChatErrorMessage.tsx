@@ -1,6 +1,6 @@
 import React from 'react';
 import { OperationResult, type OperationResultAction } from '../responses/OperationResult';
-import { RefreshCw, ArrowLeft, MessageSquare } from 'lucide-react';
+import { RefreshCw, ArrowLeft, MessageSquare, RotateCcw } from 'lucide-react';
 
 interface ErrorDetails {
   code: string;
@@ -63,28 +63,35 @@ export const ChatErrorMessage: React.FC<ChatErrorMessageProps> = ({
 
   const { title, message, status } = getErrorConfig();
 
-  const actions = [
-    ...[
-      onRetry && {
-        label: 'Try Again',
-        onClick: onRetry,
-        icon: <RefreshCw className="h-4 w-4" />,
-        variant: 'default' as const,
-      },
-      onRollback && {
-        label: 'Undo Last Action',
-        onClick: onRollback,
-        icon: <ArrowLeft className="h-4 w-4" />,
-        variant: 'outline' as const,
-      },
-      onStartNewChat && {
-        label: 'Start New Chat',
-        onClick: onStartNewChat,
-        icon: <MessageSquare className="h-4 w-4" />,
-        variant: 'ghost' as const,
-      },
-    ].filter((action): action is OperationResultAction => action !== null && action !== undefined),
+  type ActionItem = {
+    label: string;
+    onClick: () => void;
+    icon: JSX.Element;
+    variant: 'default' | 'outline' | 'ghost';
+  };
+
+  const actionItems: Array<ActionItem | undefined> = [
+    onRetry && {
+      label: 'Try Again',
+      onClick: onRetry,
+      icon: <RotateCcw className="h-4 w-4" />,
+      variant: 'default' as const,
+    },
+    onRollback && {
+      label: 'Undo Last Action',
+      onClick: onRollback,
+      icon: <ArrowLeft className="h-4 w-4" />,
+      variant: 'outline' as const,
+    },
+    onStartNewChat && {
+      label: 'Start New Chat',
+      onClick: onStartNewChat,
+      icon: <MessageSquare className="h-4 w-4" />,
+      variant: 'ghost' as const,
+    },
   ];
+
+  const actions: OperationResultAction[] = actionItems.filter((action): action is ActionItem => Boolean(action));
 
   return (
     <div className={`max-w-2xl mx-auto ${className}`}>
