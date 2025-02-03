@@ -30,6 +30,23 @@ export interface RAGAgentInput extends BaseAgentInput {
   documentType?: AIDocument['document_type'];
 }
 
+// Define AgentInfo type
+export interface AgentInfo {
+  id: string;
+  name: string;
+  role: string;
+  specialties: Array<{
+    skill: string;
+    category: string;
+    proficiency: number;
+  }>;
+  currentWorkload: {
+    active_tickets: number;
+    priority_distribution: Record<string, number>;
+    avg_resolution_time?: number;
+  };
+}
+
 export interface RAGContext {
   domain: 'kb' | 'ticket' | 'team';
   similarTickets: Array<{
@@ -38,6 +55,8 @@ export interface RAGContext {
     description: string;
     status: string;
     priority: string;
+    assigned_to: string | null;
+    similarity?: number;
   }>;
   kbArticles: Array<{
     id: string;
@@ -49,6 +68,51 @@ export interface RAGContext {
     solution: string;
     effectiveness: number;
   }>;
+  requiredSkills?: Array<{
+    id: string;
+    name: string;
+    category: string;
+    description?: string;
+  }>;
+  resolvedCategory?: {
+    id: string;
+    name: string;
+  };
+  vectorResults?: Array<{
+    id: string;
+    content: string;
+    metadata: Record<string, any>;
+    similarity: number;
+  }>;
+  relatedDocuments?: Array<{
+    id: string;
+    title?: string;
+    content: string;
+    document_type: string;
+    metadata: Record<string, any>;
+  }>;
+  existingTeams?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    similarity: number;
+    member_count?: number;
+  }>;
+  qualifiedAgents?: Array<{
+    id: string;
+    full_name: string;
+    proficiency_level: number;
+    current_teams?: string[];
+  }>;
+  ticket?: {
+    id: string;
+    title: string;
+    description: string | null;
+    status: string;
+    priority: string;
+    assigned_to: string | null;
+  };
+  agentInfo?: AgentInfo;
 }
 
 // Entity recognition types

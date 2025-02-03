@@ -189,5 +189,94 @@ export const knowledgeBaseService = {
             .eq('id', articleId)
 
         if (updateError) throw updateError
+    },
+
+    /**
+     * Get all articles for admin view, including unpublished ones
+     */
+    async getAllArticlesAdmin(): Promise<GetKBArticleResponse[]> {
+        const { data: userData } = await supabase.auth.getUser()
+        if (!userData.user) throw new Error('Not authenticated')
+
+        // Check if user is admin
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', userData.user.id)
+            .single()
+
+        if (!profile || profile.role !== 'admin') throw new Error('Unauthorized')
+
+        // Get articles with their categories
+        const { data: articles, error } = await supabase
+            .from('kb_articles')
+            .select(`
+                *,
+                category:kb_categories(*),
+                tags:kb_article_tags(*)
+            `)
+            .eq('deleted', false)
+            .order('created_at', { ascending: false })
+
+        if (error) throw error
+        if (!articles) return []
+
+        // Get feedback summaries for all articles
+        const articleIds = articles.map(article => article.id)
+        const { data: feedback, error: feedbackError } = await supabase
+            .from('kb_article_feedback')
+            .select('article_id, is_helpful')
+            .in('article_id', articleIds)
+
+        if (feedbackError) throw feedbackError
+
+        // Calculate feedback summaries
+        const feedbackSummaries = feedback?.reduce((acc, curr) => {
+            if (!acc[curr.article_id]) {
+                acc[curr.article_id] = { helpful_count: 0, not_helpful_count: 0 }
+            }
+            if (curr.is_helpful) {
+                acc[curr.article_id].helpful_count++
+            } else {
+                acc[curr.article_id].not_helpful_count++
+            }
+            return acc
+        }, {} as Record<string, { helpful_count: number, not_helpful_count: number }>)
+
+        // Map articles to include feedback summaries
+        return articles.map(article => ({
+            ...article,
+            feedback_summary: feedbackSummaries?.[article.id] || {
+                helpful_count: 0,
+                not_helpful_count: 0
+            }
+        }))
+    },
+
+    /**
+     * Toggle article publication status (admin only)
+     */
+    async toggleArticlePublication(articleId: string, isPublished: boolean): Promise<void> {
+        const { data: userData } = await supabase.auth.getUser()
+        if (!userData.user) throw new Error('Not authenticated')
+
+        // Check if user is admin
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', userData.user.id)
+            .single()
+
+        if (!profile || profile.role !== 'admin') throw new Error('Unauthorized')
+
+        const { error } = await supabase
+            .from('kb_articles')
+            .update({ 
+                is_published: isPublished,
+                last_reviewed_at: isPublished ? new Date().toISOString() : null
+            })
+            .eq('id', articleId)
+
+        if (error) throw error
     }
 } 

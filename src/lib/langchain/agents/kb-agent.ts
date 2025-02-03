@@ -1,204 +1,361 @@
-import { BaseAgent, ChatModel } from '../types';
 import { z } from 'zod';
+import { BaseAgent } from './types';
+import { ChatModel } from '../types';
 import { ChatOpenAI } from '@langchain/openai';
-import { supabase } from '@/services/supabase';
+
+
+// Define database operation types
+const OperationType = z.enum(['SELECT', 'INSERT', 'UPDATE', 'DELETE']);
+
+// Define database table types
+const TableName = z.enum(['kb_articles', 'ai_documents', 'kb_categories']);
+
+// Define core KB operations
+const KBOperations = z.enum([
+  'draft_article',      // Create new article content
+  'update_article',     // Update existing article
+  'search_articles'     // Search using vectors
+]);
+
+type KBOperation = z.infer<typeof KBOperations>;
 
 // Define input schema
 const kbAgentInputSchema = z.object({
-  operation: z.enum(['kb_search', 'kb_create', 'kb_update']),
-  parameters: z.record(z.any()),
+  operation: KBOperations,
+  parameters: z.object({
+    title: z.string().optional(),
+    content: z.string().optional(),
+    category: z.string().optional(),
+    category_id: z.string().uuid().optional(),
+    author_id: z.string().uuid().optional(),
+    is_published: z.boolean().optional(),
+    metadata: z.record(z.any()).optional()
+  }).passthrough(),
   context: z.any().optional()
 });
 
-// Define output schema for execution agent
-const kbAgentOutputSchema = z.object({
-  operation: z.enum(['SELECT', 'INSERT', 'UPDATE', 'DELETE']),
-  table: z.enum(['kb_articles', 'kb_categories', 'kb_tags']),
-  data: z.record(z.any()),
-  conditions: z.array(z.record(z.any())),
-  responseTemplate: z.object({
-    success: z.string(),
-    error: z.string()
+// Define article source type
+const ArticleSource = z.enum(['internal', 'general_knowledge', 'hybrid']);
+
+// Define article metadata schema
+const ArticleMetadata = z.object({
+  article_type: z.string(),
+  related_tickets: z.array(z.string().uuid()).optional(),
+  platform: z.string().optional(),
+  feature: z.string().optional(),
+  source: ArticleSource,
+  tags: z.array(z.string()).optional(),
+  ai_indexed: z.boolean().optional()
+});
+
+// Define content source schema
+const ContentSource = z.object({
+  internal_references: z.array(z.object({
+    type: z.enum(['ticket_thread', 'kb_article', 'ai_document']),
+    id: z.string().uuid(),
+    relevance: z.number()
+  })),
+  general_knowledge: z.object({
+    included: z.boolean(),
+    topics: z.array(z.string())
   })
 });
 
-type KBAgentInput = z.infer<typeof kbAgentInputSchema>;
-type KBAgentOutput = z.infer<typeof kbAgentOutputSchema>;
+// Add search parameters schema
+const SearchParameters = z.object({
+  category_id: z.string().uuid().optional(),
+  query: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  metadata: z.record(z.any()).optional()
+});
+
+// Define article content schema
+const ArticleContent = z.object({
+  title: z.string(),
+  content: z.string(),
+  category_id: z.string().uuid(),
+  metadata: ArticleMetadata,
+  search_vector: z.array(z.number()).optional() // For vector search
+});
+
+// Define KB agent output schema
+const KBAgentOutput = z.object({
+  action: z.enum(['SELECT', 'INSERT', 'UPDATE', 'DELETE']),
+  table: z.enum(['kb_articles', 'ai_documents', 'kb_categories']),
+  data: z.object({
+    // Article fields
+    title: z.string().optional(),
+    content: z.string().optional(),
+    category_id: z.string().uuid().optional(),
+    author_id: z.string().uuid().optional(),
+    is_published: z.boolean().optional(),
+    deleted: z.boolean().optional(),
+    
+    // Search fields
+    select: z.array(z.string()).optional(),
+    transform: z.enum(['vector_search', 'semantic_search', 'category_group']).optional()
+  }).passthrough(),
+  conditions: z.array(z.record(z.any())).optional()
+});
+
+type KBOutput = z.infer<typeof KBAgentOutput>;
+
+const PROMPT_TEMPLATE = `You are a Knowledge Base Agent responsible for managing help desk articles.
+Your core responsibilities are:
+1. Creating well-structured articles using internal data and general knowledge
+2. Formatting content for the knowledge base
+3. Ensuring content is searchable and properly indexed
+
+IMPORTANT: When creating or updating articles, you MUST use a valid category_id that exists in the kb_categories table.
+The category_id must be a valid UUID that references an existing category. Do not make up random UUIDs.
+
+Current Request:
+{input}
+
+Context:
+{context}
+
+You must respond with a JSON object following this structure:
+
+{
+  "action": "INSERT" | "SELECT" | "UPDATE" | "DELETE",
+  "table": "kb_articles" | "ai_documents" | "kb_categories",
+  "data": {
+    // For article operations:
+    "title": string,                  // Required for creation
+    "content": string,                // Required for creation
+    "category_id": string,            // Required UUID from kb_categories table
+    "author_id": string,              // Optional (UUID)
+    "is_published": boolean,          // Optional
+    
+    // For search operations:
+    "select": string[],               // Fields to select
+    "transform": "vector_search" | "semantic_search" | "category_group"
+  },
+  "conditions": [                     // Optional search/update conditions
+    { "field": "value" }
+  ]
+}
+
+Example responses for different operations:
+
+For article creation (assuming the category_id exists in kb_categories):
+{
+  "action": "INSERT",
+  "table": "kb_articles",
+  "data": {
+    "title": "How to Reset Your Password",
+    "content": "## Overview\\nThis guide explains the password reset process...\\n\\n## Steps\\n1. Click 'Forgot Password'\\n2. Enter your email\\n3. Follow the link in your email",
+    "category_id": "{{VALID_CATEGORY_ID}}",  // Must be a valid UUID from kb_categories
+    "is_published": false
+  }
+}
+
+For vector search:
+{
+  "action": "SELECT",
+  "table": "kb_articles",
+  "data": {
+    "select": ["title", "content", "category_id", "metadata"],
+    "transform": "vector_search"
+  },
+  "conditions": [
+    { "search_vector": { "similarity": 0.8 } },
+    { "metadata": { "source": ["internal", "hybrid"] } }
+  ]
+}
+
+Analyze the input and context, then generate the appropriate operation.`;
+
+const ARTICLE_GENERATION_TEMPLATE = `You are a technical documentation expert. Your task is to create a comprehensive help desk article.
+
+Article Requirements:
+- Title should be clear and descriptive
+- Content should be well-structured with markdown headings
+- Include practical examples and steps where applicable
+- Focus on troubleshooting and resolution steps
+- Consider the target audience and platform
+
+IMPORTANT JSON FORMATTING RULES:
+1. Use proper JSON string escaping for newlines (\\n) and quotes (\")
+2. Do not use actual newlines or control characters in JSON string values
+3. All content must be properly escaped in a single line
+4. Format markdown with \\n for newlines
+
+Example of properly formatted response:
+{
+  "title": "Example Article",
+  "content": "# Heading\\n\\nThis is a paragraph.\\n\\n## Subheading\\n\\n1. First item\\n2. Second item",
+  "metadata": {
+    "article_type": "guide",
+    "target_audience": ["customers"],
+    "platform": "web",
+    "tags": ["example"]
+  }
+}
+
+Request: {input}
+Context: {context}
+
+Generate a complete article with:
+1. A clear title
+2. Well-structured content using markdown with escaped newlines
+3. Step-by-step instructions if applicable
+4. Common issues and solutions
+5. Related information or prerequisites
+
+Remember: All string content must use \\n for newlines and be properly escaped.`;
 
 export class KBAgent implements BaseAgent {
   name = "Knowledge Base Agent";
-  description = "Manages knowledge base operations";
+  description = "Creates and manages knowledge base articles with vector search support";
 
   constructor(
     private llm: ChatModel
   ) {}
 
-  async process(input: string | KBAgentInput): Promise<string> {
+  private async generateArticleContent(input: any, context: any): Promise<any> {
     try {
-      // Parse input
-      const parsedInput = typeof input === 'string' 
-        ? JSON.parse(input) 
-        : input;
-      const validatedInput = kbAgentInputSchema.parse(parsedInput);
+      console.group('📝 Generating Article Content');
+      console.log('Input:', input);
+      console.log('Context:', context);
 
-      // Process based on operation
-      let result: KBAgentOutput;
-      switch (validatedInput.operation) {
-        case 'kb_search':
-          result = await this.handleSearch(validatedInput);
-          break;
-        case 'kb_create':
-          result = await this.handleCreate(validatedInput);
-          break;
-        case 'kb_update':
-          result = await this.handleUpdate(validatedInput);
-          break;
-        default:
-          throw new Error(`Unsupported operation: ${validatedInput.operation}`);
+      const prompt = ARTICLE_GENERATION_TEMPLATE
+        .replace('{input}', JSON.stringify(input))
+        .replace('{context}', JSON.stringify(context));
+
+      const response = await this.llm.invoke(prompt);
+      
+      if (!response || typeof response.content !== 'string') {
+        throw new Error('Invalid article generation response');
       }
 
-      // Validate and return result
-      return JSON.stringify(kbAgentOutputSchema.parse(result));
+      console.log('Raw LLM Response:', response.content);
+
+      // Try to extract JSON from the response if it's wrapped in other text
+      const jsonMatch = response.content.match(/(\{[\s\S]*\})/);
+      if (!jsonMatch) {
+        throw new Error('No valid JSON object found in response');
+      }
+
+      // Parse the JSON directly - the LLM is already giving us valid JSON
+      const parsedContent = JSON.parse(jsonMatch[1]);
+      
+      // Validate the required fields
+      if (!parsedContent.title || !parsedContent.content) {
+        throw new Error('Generated article missing required fields');
+      }
+
+      // Ensure metadata has the correct structure
+      const metadata = {
+        article_type: parsedContent.metadata?.article_type || 'guide',
+        target_audience: parsedContent.metadata?.target_audience || ['customers'],
+        platform: parsedContent.metadata?.platform || 'all',
+        tags: parsedContent.metadata?.tags || [],
+        source: 'internal' as const
+      };
+
+      const result = {
+        title: parsedContent.title,
+        content: parsedContent.content,
+        metadata
+      };
+
+      console.log('Processed Article:', result);
+      console.groupEnd();
+      return result;
     } catch (error) {
-      console.error('KB agent processing failed:', error);
+      console.error('Article generation failed:', error);
+      console.groupEnd();
       throw error;
     }
   }
 
-  private async handleSearch(input: KBAgentInput): Promise<KBAgentOutput> {
-    const { parameters } = input;
-    return {
-      operation: 'SELECT',
-      table: 'kb_articles',
-      data: {},
-      conditions: [
-        ...(parameters.articleId ? [{ id: parameters.articleId }] : []),
-        ...(parameters.category ? [{ category: parameters.category }] : []),
-        ...(parameters.tags ? [{ tags: parameters.tags }] : [])
-      ],
-      responseTemplate: {
-        success: 'Found {count} articles matching your criteria',
-        error: 'No articles found matching your criteria'
+  async process(input: { 
+    operation: z.infer<typeof KBOperations>;
+    parameters: any;
+    context: any;
+  }): Promise<string> {
+    try {
+      console.group('📚 KB Agent');
+      console.log('Input:', input);
+
+      // Map operations to database actions
+      const operationMap = {
+        draft_article: 'INSERT',
+        update_article: 'UPDATE',
+        search_articles: 'SELECT'
+      } as const;
+
+      // Extract UUIDs from context if available
+      const category_id = input.parameters.category_id || 
+                         input.context?.category_id ||
+                         input.context?.resolvedCategory?.id;
+      const author_id = input.parameters.author_id || input.context?.author_id;
+
+      if (input.operation === 'draft_article' && !category_id) {
+        throw new Error('category_id is required for article creation');
       }
-    };
-  }
 
-  private async handleCreate(input: KBAgentInput): Promise<KBAgentOutput> {
-    const { parameters } = input;
-    return {
-      operation: 'INSERT',
-      table: 'kb_articles',
-      data: {
-        title: parameters.title,
-        content: parameters.content,
-        category_id: parameters.categoryId,
-        tags: parameters.tags || [],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      conditions: [],
-      responseTemplate: {
-        success: 'Article "{title}" created successfully',
-        error: 'Failed to create article: {error}'
-      }
-    };
-  }
-
-  private async handleUpdate(input: KBAgentInput): Promise<KBAgentOutput> {
-    const { parameters } = input;
-
-    // Validate and normalize article ID
-    if (!parameters.articleId || !this.isValidUUID(parameters.articleId)) {
-      // Try to find article by title/reference if provided
-      if (parameters.articleTitle || parameters.articleReference) {
-        const searchQuery = parameters.articleTitle || parameters.articleReference;
-        const searchResult = await this.findArticleByTitle(searchQuery);
-        if (searchResult?.id) {
-          parameters.articleId = searchResult.id;
-        } else {
-          throw new Error(`Could not find article with title/reference: ${searchQuery}`);
-        }
+      let result;
+      
+      // For draft operations, generate article content first
+      if (input.operation === 'draft_article') {
+        console.log('Generating article content...');
+        const generatedArticle = await this.generateArticleContent(input.parameters, input.context);
+        
+        result = {
+          action: 'INSERT',
+          table: 'kb_articles',
+          data: {
+            title: generatedArticle.title,
+            content: generatedArticle.content,
+            category_id: category_id,
+            author_id: author_id,
+            is_published: false
+          }
+        };
       } else {
-        throw new Error('Valid article identifier (UUID, title, or reference) is required for update');
+        // For other operations, use the standard prompt
+        const prompt = PROMPT_TEMPLATE
+          .replace('{input}', JSON.stringify({
+            operation: input.operation,
+            parameters: {
+              ...input.parameters,
+              category_id,
+              author_id
+            }
+          }))
+          .replace('{context}', JSON.stringify(input.context));
+
+        const response = await this.llm.invoke(prompt);
+        
+        if (!response || typeof response.content !== 'string') {
+          throw new Error('Invalid LLM response format');
+        }
+
+        result = JSON.parse(response.content);
       }
+      
+      // Ensure the action matches the operation
+      result.action = operationMap[input.operation];
+      
+      // Ensure UUIDs are properly set in the result
+      if (result.data && input.operation === 'draft_article') {
+        result.data.category_id = category_id;
+        result.data.author_id = author_id;
+      }
+      
+      const validated = KBAgentOutput.parse(result);
+
+      console.log('Generated Output:', validated);
+      console.groupEnd();
+      return JSON.stringify(validated);
+    } catch (error) {
+      console.error('KB operation failed:', error);
+      console.groupEnd();
+      throw error;
     }
-
-    // Handle content update
-    if (parameters.content) {
-      return {
-        operation: 'UPDATE',
-        table: 'kb_articles',
-        data: {
-          content: parameters.content,
-          updated_at: new Date().toISOString()
-        },
-        conditions: [{ id: parameters.articleId }],
-        responseTemplate: {
-          success: 'Article content updated successfully',
-          error: 'Failed to update article content: {error}'
-        }
-      };
-    }
-
-    // Handle category update
-    if (parameters.categoryId) {
-      return {
-        operation: 'UPDATE',
-        table: 'kb_articles',
-        data: {
-          category_id: parameters.categoryId,
-          updated_at: new Date().toISOString()
-        },
-        conditions: [{ id: parameters.articleId }],
-        responseTemplate: {
-          success: 'Article category updated successfully',
-          error: 'Failed to update article category: {error}'
-        }
-      };
-    }
-
-    // Handle tags update
-    if (parameters.tags) {
-      return {
-        operation: 'UPDATE',
-        table: 'kb_articles',
-        data: {
-          tags: parameters.tags,
-          updated_at: new Date().toISOString()
-        },
-        conditions: [{ id: parameters.articleId }],
-        responseTemplate: {
-          success: 'Article tags updated successfully',
-          error: 'Failed to update article tags: {error}'
-        }
-      };
-    }
-
-    throw new Error('No valid update parameters provided');
-  }
-
-  // Helper method to validate UUID
-  private isValidUUID(str: string): boolean {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-  }
-
-  // Helper method to find article by title
-  private async findArticleByTitle(title: string): Promise<{ id: string } | null> {
-    // Use the supabase client to search for articles
-    const { data, error } = await supabase
-      .from('kb_articles')
-      .select('id, title')
-      .ilike('title', `%${title}%`)
-      .limit(1)
-      .single();
-
-    if (error || !data) {
-      console.error('Error finding article by title:', error);
-      return null;
-    }
-
-    return { id: data.id };
   }
 }
 

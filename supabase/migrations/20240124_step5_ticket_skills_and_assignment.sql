@@ -217,7 +217,6 @@ BEGIN
         UPDATE tickets 
         SET 
             assigned_to = v_agent_id,
-            status = CASE WHEN status = 'new' THEN 'open' ELSE status END,
             updated_at = NOW()
         WHERE id = p_ticket_id;
         

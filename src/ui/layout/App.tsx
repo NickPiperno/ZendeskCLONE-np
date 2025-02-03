@@ -17,6 +17,7 @@ import { AuditLogsPage } from '@/modules/admin/pages/AuditLogsPage'
 import { TestDbPage } from '@/modules/admin/pages/TestDbPage'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { KnowledgeBasePage } from '@/modules/knowledge-base/pages/KnowledgeBasePage'
+import { KnowledgeBaseManagementPage } from '@/modules/admin/pages/KnowledgeBaseManagementPage'
 
 const queryClient = new QueryClient()
 
@@ -79,6 +80,7 @@ export default function App() {
               <Route path="/admin/settings" element={<AdminSettingsPage />} />
               <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
               <Route path="/admin/test-db" element={<TestDbPage />} />
+              <Route path="/admin/knowledge-base" element={<KnowledgeBaseManagementPage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </MainLayout>

@@ -11,7 +11,7 @@ import { ChangeEvent, FormEvent } from 'react';
 import { sendMessage } from '../services/chat.service';
 
 interface Message {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'processing';
   content: string;
   error?: boolean;
   isNew?: boolean;
@@ -40,6 +40,10 @@ export function AIChat() {
     return null;
   }
 
+  const addProcessingStep = (step: string) => {
+    setMessages(prev => [...prev, { role: 'processing', content: step, isNew: true }]);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -59,13 +63,17 @@ export function AIChat() {
     }, 300);
 
     try {
-      const response = await sendMessage(input);
+      const response = await sendMessage(input, (step) => {
+        setMessages(prev => [...prev, { role: 'processing', content: step, isNew: true }]);
+      });
+
+      // Clear processing messages and add assistant response
       const assistantMessage: Message = { 
         role: 'assistant', 
         content: typeof response === 'string' ? response : response.message.content,
         isNew: true
       };
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages(prev => [...prev.filter(msg => msg.role !== 'processing'), assistantMessage]);
       
       // Remove isNew flag after animation
       setTimeout(() => {
@@ -89,8 +97,9 @@ export function AIChat() {
         errorMessage = 'An error occurred while sending the message.';
       }
       
+      // Clear processing messages and add error message
       const systemMessage: Message = { role: 'system', content: errorMessage, error: true };
-      setMessages(prev => [...prev, systemMessage]);
+      setMessages(prev => [...prev.filter(msg => msg.role !== 'processing'), systemMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -153,73 +162,82 @@ export function AIChat() {
                     message.isNew && 'animate-in slide-in-from-bottom-3 fade-in',
                     message.role === 'user'
                       ? 'ml-auto bg-primary text-primary-foreground shadow-md hover:shadow-lg'
+                      : message.role === 'processing'
+                      ? 'bg-muted/50 text-muted-foreground font-mono text-sm flex items-center gap-2'
                       : message.error
                       ? 'bg-destructive/10 text-destructive shadow hover:shadow-md'
                       : 'bg-muted shadow hover:shadow-md'
                   )}
                 >
-                  <ReactMarkdown 
-                    className={cn(
-                      "prose prose-sm dark:prose-invert",
-                      "break-words whitespace-pre-wrap",
-                      "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-                      message.isNew && 'animate-in fade-in duration-300'
-                    )}
-                    components={{
-                      h1: ({ children }) => (
-                        <h1 role="heading" aria-level={1} className="text-xl font-bold mt-4 first:mt-0">
-                          {children}
-                        </h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 role="heading" aria-level={2} className="text-lg font-semibold mt-3 first:mt-0">
-                          {children}
-                        </h2>
-                      ),
-                      code: ({ children }) => (
-                        <code className="bg-muted-foreground/20 rounded px-1 break-all">
-                          {children}
-                        </code>
-                      ),
-                      pre: ({ children }) => (
-                        <pre className="bg-muted-foreground/20 rounded p-2 overflow-x-auto max-w-full my-2">
-                          {children}
-                        </pre>
-                      ),
-                      p: ({ children }) => (
-                        <p className="mt-2 first:mt-0 break-words whitespace-pre-wrap">
-                          {children}
-                        </p>
-                      ),
-                      ul: ({ children }) => (
-                        <ul className="list-disc list-inside mt-2 first:mt-0 space-y-1">
-                          {children}
-                        </ul>
-                      ),
-                      ol: ({ children }) => (
-                        <ol className="list-decimal list-inside mt-2 first:mt-0 space-y-1">
-                          {children}
-                        </ol>
-                      ),
-                      li: ({ children }) => (
-                        <li className="break-words whitespace-pre-wrap">
-                          {children}
-                        </li>
-                      ),
-                      a: ({ href, children }) => (
-                        <a 
-                          href={href} 
-                          className="text-primary hover:underline break-all"
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                        >
-                          {children}
-                        </a>
-                      )
-                    }}
-                  >
-                    {message.content}
-                  </ReactMarkdown>
+                  {message.role === 'processing' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>{message.content}</span>
+                    </>
+                  ) : (
+                    <ReactMarkdown 
+                      className={cn(
+                        "prose prose-sm dark:prose-invert",
+                        "break-words whitespace-pre-wrap",
+                        "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+                        message.isNew && 'animate-in fade-in duration-300'
+                      )}
+                      components={{
+                        h1: ({ children }) => (
+                          <h1 role="heading" aria-level={1} className="text-xl font-bold mt-4 first:mt-0">
+                            {children}
+                          </h1>
+                        ),
+                        h2: ({ children }) => (
+                          <h2 role="heading" aria-level={2} className="text-lg font-semibold mt-3 first:mt-0">
+                            {children}
+                          </h2>
+                        ),
+                        code: ({ children }) => (
+                          <code className="bg-muted-foreground/20 rounded px-1 break-all">
+                            {children}
+                          </code>
+                        ),
+                        pre: ({ children }) => (
+                          <pre className="bg-muted-foreground/20 rounded p-2 overflow-x-auto max-w-full my-2">
+                            {children}
+                          </pre>
+                        ),
+                        p: ({ children }) => (
+                          <p className="mt-2 first:mt-0 break-words whitespace-pre-wrap">
+                            {children}
+                          </p>
+                        ),
+                        ul: ({ children }) => (
+                          <ul className="list-disc list-inside mt-2 first:mt-0 space-y-1">
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal list-inside mt-2 first:mt-0 space-y-1">
+                            {children}
+                          </ol>
+                        ),
+                        li: ({ children }) => (
+                          <li className="break-words whitespace-pre-wrap">
+                            {children}
+                          </li>
+                        ),
+                        a: ({ href, children }) => (
+                          <a 
+                            href={href} 
+                            className="text-primary hover:underline break-all"
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                          >
+                            {children}
+                          </a>
+                        )
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  )}
                 </div>
               ))}
               {isLoading && (

@@ -58,6 +58,17 @@ export function AdminConsolePage() {
           </p>
         </Link>
 
+        {/* Knowledge Base Management */}
+        <Link
+          to="/admin/knowledge-base"
+          className="p-6 border rounded-lg bg-card hover:bg-card/80 transition-colors"
+        >
+          <h2 className="text-xl font-semibold mb-2">Knowledge Base</h2>
+          <p className="text-muted-foreground">
+            Manage articles, drafts, and categories
+          </p>
+        </Link>
+
         {/* System Metrics */}
         <Link
           to="/admin/metrics"

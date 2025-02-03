@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/services/supabase'
 import { TicketService } from '@/services/tickets'
 import type { Ticket, TicketStatus, TicketPriority } from '../types/ticket.types'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface UseTicketsFilters {
   status?: TicketStatus
@@ -21,6 +22,7 @@ export function useTickets(filters?: UseTicketsFilters) {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   async function fetchTickets() {
     setLoading(true)
@@ -60,16 +62,19 @@ export function useTickets(filters?: UseTicketsFilters) {
         async (payload) => {
           console.log('Real-time update:', payload)
           
-          // Refetch to ensure we have the latest state with filters
-          await fetchTickets()
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'ticket-created' },
-        async () => {
-          console.log('Received ticket-created broadcast')
-          await fetchTickets()
+          // Handle the update based on the event type
+          if (payload.eventType === 'INSERT') {
+            setTickets(prev => [payload.new as Ticket, ...prev])
+          } else if (payload.eventType === 'UPDATE') {
+            setTickets(prev => prev.map(ticket => 
+              ticket.id === payload.new.id ? payload.new as Ticket : ticket
+            ))
+          } else if (payload.eventType === 'DELETE') {
+            setTickets(prev => prev.filter(ticket => ticket.id !== payload.old.id))
+          }
+
+          // Also invalidate the query cache
+          queryClient.invalidateQueries({ queryKey: ['tickets'] })
         }
       )
       .subscribe()

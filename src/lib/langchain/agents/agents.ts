@@ -13,6 +13,7 @@ import { ticketAgent } from "./ticket-agent";  // Import the singleton instance
 import { ExecutionAgent } from "./execution-agent";
 import { AuditAgent } from "./audit-agent";
 import { ResponseAgent } from "./response-agent";
+import { ProcessedInputSchema } from "./input-processor-agent";
 
 // Create OpenAI instance for agents that need it
 const chatModel: ChatModel = new ChatOpenAI({
@@ -38,7 +39,7 @@ const responseAgent = new ResponseAgent(chatModel);
 
 // Create agent instances
 export const agents = {
-  inputProcessor: new InputProcessorAgent(),
+  inputProcessor: new InputProcessorAgent(chatModel),  // Initialize with LLM support
   rag: new RAGAgent(chatModel, supabase),  // Needs Supabase for vector search
   entityRecognition: new EntityRecognitionAgent(chatModel),
   taskRouter: new TaskRouterAgent(chatModel),
@@ -68,54 +69,40 @@ interface AgentChainData {
 // Process input through the agent chain
 export async function processAgentChain(input: string): Promise<string> {
   try {
+    console.group('🎭 Agent Orchestrator');
+    console.log('Input:', input);
+
     // Step 1: Process input
     const processedInput = await agents.inputProcessor.process(input);
+    console.log('Processed Input:', processedInput);
 
-    // Step 2: RAG retrieval
-    const ragResult = await agents.rag.process(processedInput);
-    const context = JSON.parse(ragResult);
+    // Step 2: Get relevant context
+    const parsedInput = ProcessedInputSchema.parse(JSON.parse(processedInput));
+    const ragContext = await agents.rag.process(parsedInput);
+    console.log('RAG Context:', ragContext);
 
-    // Step 3: Entity recognition
-    const entities = JSON.parse(await agents.entityRecognition.process(processedInput));
+    // Step 3: Extract entities
+    const entities = await agents.entityRecognition.process(ragContext);
+    console.log('Entities:', entities);
 
-    // Step 4: Task routing
-    const taskRoute = await agents.taskRouter.process({
-      query: processedInput,
-      entities,
-      context
-    });
+    // Step 4: Route to appropriate task
+    const taskInput = {
+      query: parsedInput.description || '',
+      entities: JSON.parse(entities),
+      context: JSON.parse(ragContext)
+    };
+    const task = await agents.taskRouter.process(taskInput);
+    console.log('Task:', task);
 
     // Step 5: Execute task
-    const executionResult = JSON.parse(await agents.execution.process(JSON.stringify({
-      task: taskRoute,
-      entities,
-      context
-    })));
+    const result = await agents.execution.process(task);
+    console.log('Result:', result);
 
-    // Step 6: Audit
-    const parsedTaskRoute = JSON.parse(taskRoute);
-    await agents.audit.process({
-      operation: taskToAuditOperation[parsedTaskRoute.operation as keyof typeof taskToAuditOperation] || 'SELECT',
-      domain: context?.domain || 'ticket',
-      changes: executionResult.changes || [],
-      timestamp: new Date().toISOString(),
-      metadata: {
-        entities,
-        context,
-        executionResult
-      }
-    });
-
-    // Step 7: Format response
-    return await agents.response.process({
-      domain: context?.domain || 'ticket',
-      operation: taskRoute,
-      result: executionResult,
-      context
-    });
-
+    console.groupEnd();
+    return result;
   } catch (error) {
-    console.error('Agent chain processing failed:', error);
+    console.error('Agent orchestration failed:', error);
+    console.groupEnd();
     return `Error processing request: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 }

@@ -1,501 +1,374 @@
-import { BaseAgent, ChatModel, RAGContext } from '../types';
+import { BaseAgent } from './types';
+import { ChatModel } from '../types';
 import { z } from 'zod';
 
-// Define UUID validation regex
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TICKET_REF_REGEX = /^(?:TK[-])?(\d+)$/i;  // Matches TK-123 or just 123
-const KB_REF_REGEX = /^(?:KB[-])?(\d+)$/i;      // Matches KB-123 or just 123
+// Define entity types based on our database schema
+const EntityTypes = z.enum([
+  'team', 'ticket', 'article', 'skill', 'profile', 'team_member', 'user_skill', 'team_schedule'
+]);
 
-// Define entity types and categories
-const entityCategories = {
-  tickets: ['TicketID', 'Status', 'Priority'],
-  users: ['UserID', 'AgentID', 'CustomerID', 'TeamID'],
-  kb: [
-    'ArticleID',
-    'ArticleTitle',
-    'ArticleCategory',
-    'ArticleTag',
-    'ArticleVersion'
-  ],
-  topics: [
-    // Issue Categories
-    'Authentication',
-    'Billing',
-    'Performance',
-    'Security',
-    'Integration',
-    'Data',
-    'UI/UX',
-    'API',
-    // Product Areas
-    'Frontend',
-    'Backend',
-    'Database',
-    'Infrastructure',
-    // Problem Types
-    'Bug',
-    'Feature_Request',
-    'Question',
-    'Configuration',
-    // Support Levels
-    'L1_Support',
-    'L2_Support',
-    'L3_Support',
-    // KB Categories
-    'How_To',
-    'Troubleshooting',
-    'Best_Practice',
-    'Reference',
-    'FAQ'
-  ],
-  metadata: ['Date', 'Time', 'Location', 'Version']
-} as const;
+type EntityType = z.infer<typeof EntityTypes>;
 
-// Define entity schema with UUID validation
-const entitySchema = z.object({
-  type: z.string(),
-  value: z.string(),
-  confidence: z.number().min(0).max(1),
-  metadata: z.record(z.any()).optional(),
-  normalizedValue: z.string().optional() // For normalized UUIDs and references
-});
+// Define confidence score type
+const ConfidenceScore = z.number().min(0).max(1);
 
-// Define grouped entities schema
-const groupedEntitiesSchema = z.object({
-  tickets: z.array(z.object({
-    id: z.string(),
-    confidence: z.number(),
-    status: z.string().optional(),
-    priority: z.string().optional()
-  })),
-  kb: z.array(z.object({
-    id: z.string().optional(),
-    title: z.string().optional(),
-    category: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-    version: z.string().optional(),
-    confidence: z.number()
-  })).optional(),
-  topic: z.object({
-    name: z.string(),
-    category: z.string().optional(),
-    subCategory: z.string().optional(),
-    problemType: z.string().optional(),
-    supportLevel: z.string().optional(),
-    kbType: z.enum(['How_To', 'Troubleshooting', 'Best_Practice', 'Reference', 'FAQ']).optional(),
-    confidence: z.number(),
-    tags: z.array(z.string()).optional()
-  }).optional(),
-  users: z.array(z.object({
-    id: z.string(),
-    type: z.enum(['agent', 'customer', 'team']),
-    confidence: z.number()
-  })),
-  priority: z.string().optional(),
-  context: z.any() // RAG context
-});
+const PROMPT_TEMPLATE = `You are an entity recognition agent that identifies and extracts structured entities from user input.
+Your task is to analyze the input and context to identify relevant entities that match our database schema.
 
-type Entity = z.infer<typeof entitySchema>;
-type GroupedEntities = z.infer<typeof groupedEntitiesSchema>;
+Database Schema:
+- Teams: id (uuid), name (string), description (string), is_active (boolean)
+- Tickets: id (uuid), title (string), description (string), status (enum), priority (enum), assigned_to (uuid)
+- Skills: id (uuid), name (string), category (string), description (string), is_active (boolean)
+- Users: id (uuid), full_name (string), role (string), email (string), is_active (boolean)
+- User Skills: user_id (uuid), skill_id (uuid), proficiency_level (1-5)
+- Team Members: team_id (uuid), user_id (uuid), is_team_lead (boolean)
+- Team Schedules: team_id (uuid), day_of_week (0-6), start_time (time), end_time (time)
+- KB Articles: id (uuid), title (string), content (string), category (technical/product/how_to/troubleshooting), is_published (boolean)
+- AI Documents: id (uuid), content (string), metadata (json), document_type (kb/ticket/team), vector_search (array)
 
-interface ProcessInput {
-  text: string;
-  context?: RAGContext;
+Input Request: {input}
+Context: {context}
+
+Instructions:
+1. Analyze the input and context to identify entities that match our schema
+2. For each entity, determine:
+   - The entity type (team, ticket, article, skill, etc.)
+   - The relevant properties based on our schema
+   - A confidence score (0-1) for the identification
+3. Return a JSON object with an "entities" field containing all identified entities
+4. Each entity should include type, value, confidence, and any relevant metadata
+5. DO NOT include example entities in the output
+6. Only return entities that are actually present in the input/context
+
+Response Format:
+{
+  "entities": {
+    "team": [{
+      "id": "uuid or null if new",
+      "name": "string",
+      "description": "string (optional)",
+      "is_active": boolean,
+      "confidence": number
+    }],
+    "ticket": [{
+      "id": "uuid or null if new",
+      "title": "string",
+      "description": "string",
+      "status": "open|in_progress|resolved|closed",
+      "priority": "low|medium|high|urgent",
+      "assigned_to": "uuid (optional)",
+      "confidence": number
+    }],
+    "skill": [{
+      "id": "uuid or null if new",
+      "name": "string",
+      "category": "string",
+      "confidence": number,
+      "metadata": {
+        "subType": "required|optional",
+        "format": "uuid"
+      }
+    }],
+    "article": [{
+      "id": "uuid or null if new",
+      "title": "string",
+      "content": "string (optional)",
+      "category": "technical|product|how_to|troubleshooting",
+      "is_published": boolean,
+      "confidence": number,
+      "metadata": {
+        "article_type": "string",
+        "target_audience": "string[]",
+        "platform": "string",
+        "feature": "string",
+        "related_tickets": "string[]",
+        "tags": "string[]"
+      }
+    }],
+    "ai_document": [{
+      "id": "uuid or null if new",
+      "content": "string",
+      "document_type": "kb|ticket|team",
+      "confidence": number,
+      "metadata": {
+        "source": "internal|external",
+        "reference_type": "string",
+        "reference_id": "string"
+      }
+    }]
+  }
 }
+
+Remember:
+- Only include entities that are actually present in the input/context
+- Do not include example entities in your response
+- Ensure all confidence scores are between 0 and 1
+- Include metadata only when relevant to the entity type
+- Return an empty array for entity types not found in the input/context
+- For KB articles, always include category and metadata.article_type
+- For AI documents, always specify document_type and source in metadata
+
+Now analyze the input and context to identify the relevant entities:`;
+
+// Define common entity fields
+const BaseEntitySchema = z.object({
+  confidence: z.number().min(0).max(1)
+});
+
+// Define specific entity schemas that exactly match our database
+const TeamEntitySchema = BaseEntitySchema.extend({
+  id: z.string().uuid().optional(),
+    name: z.string(),
+  description: z.string().optional(),
+  is_active: z.boolean().optional(),
+  isNew: z.boolean().optional()
+});
+
+const TeamMemberEntitySchema = BaseEntitySchema.extend({
+  team_id: z.string().uuid().optional(),
+  user_id: z.string().uuid().optional(),
+  is_team_lead: z.boolean().optional()
+});
+
+const TicketEntitySchema = BaseEntitySchema.extend({
+  id: z.string().uuid().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+  assigned_to: z.string().uuid().optional(),
+  filter: z.object({
+    priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+    status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
+    assigned_to: z.string().uuid().optional(),
+    timeframe: z.string().optional(),
+    subject_matter: z.object({
+      type: z.string(),
+      keywords: z.array(z.string()),
+      matches: z.array(z.string())
+    }).optional()
+  }).optional()
+});
+
+const SkillEntitySchema = BaseEntitySchema.extend({
+  id: z.string().uuid().optional(),
+  name: z.string(),
+  category: z.enum(['technical', 'product', 'language', 'soft_skill']),
+  description: z.string().optional(),
+  is_active: z.boolean().optional(),
+  metadata: z.object({
+    subType: z.enum(['required', 'member']),
+    format: z.enum(['uuid', 'reference', 'name'])
+  })
+}).strict();
+
+const UserSkillEntitySchema = BaseEntitySchema.extend({
+  user_id: z.string().uuid().optional(),
+  skill_id: z.string().uuid().optional(),
+  proficiency_level: z.number().min(1).max(5).optional()
+});
+
+const ProfileEntitySchema = BaseEntitySchema.extend({
+  id: z.string().uuid().optional(),
+  full_name: z.string(),
+  role: z.string().optional(),
+  email: z.string().optional(),
+  is_active: z.boolean().optional()
+});
+
+const ArticleEntitySchema = BaseEntitySchema.extend({
+  id: z.string().uuid().optional(),
+  title: z.string(),
+  category: z.enum(['technical', 'product', 'how_to', 'troubleshooting']),
+  content: z.string().optional(),
+  is_published: z.boolean().optional(),
+  isNew: z.boolean().optional()
+});
+
+const TeamScheduleEntitySchema = BaseEntitySchema.extend({
+  team_id: z.string().uuid().optional(),
+  user_id: z.string().uuid().optional(),
+  day_of_week: z.number().min(0).max(6),
+  start_time: z.string(),
+  end_time: z.string(),
+  is_active: z.boolean().optional()
+});
+
+// Define the output schema for recognized entities
+const EntityRecognitionOutputSchema = z.object({
+  entities: z.record(z.string(), z.union([
+    TeamEntitySchema,
+    TeamMemberEntitySchema,
+    TicketEntitySchema,
+    SkillEntitySchema,
+    UserSkillEntitySchema,
+    ProfileEntitySchema,
+    TeamScheduleEntitySchema,
+    ArticleEntitySchema
+  ]).array())
+});
+
+export type EntityRecognitionOutput = z.infer<typeof EntityRecognitionOutputSchema>;
 
 export class EntityRecognitionAgent implements BaseAgent {
   name = "Entity Recognition Agent";
-  description = "Recognizes and validates entities in user input";
-  private confidenceThreshold = 0.7;
+  description = "Packages and validates entities from RAG context for task routing";
 
   constructor(
     private llm: ChatModel
   ) {}
 
-  async process(input: string): Promise<string> {
+  private parseInput(input: { request: any; context: any } | string): { request: any; context: any } {
+    if (typeof input === 'string') {
+      return JSON.parse(input);
+    }
+    return input;
+  }
+
+  private extractRequestAndContext(parsedInput: any): { request: any; context: any } {
+    let request, context;
+
+    if (parsedInput.request && parsedInput.context) {
+      // RAG output format
+      request = parsedInput.request;
+      context = parsedInput.context;
+    } else if (parsedInput.context?.processedInput) {
+      // Processed input format
+      request = parsedInput.context.processedInput;
+      context = parsedInput.context;
+    } else {
+      // Default format
+      request = parsedInput.request || parsedInput;
+      context = parsedInput.context || {};
+    }
+
+    return { request, context };
+  }
+
+  private extractSkillEntities(context: any, request: any): any[] {
+    if (!context?.relevantSkills?.length && !request?.memberCriteria) {
+      return [];
+    }
+
+    if (context?.relevantSkills?.length > 0) {
+      return context.relevantSkills.map((skill: any) => ({
+        type: 'skill',
+        name: skill.name,
+        category: skill.category.toLowerCase(),
+        id: skill.id,
+        description: skill.description,
+        confidence: 0.95,
+        metadata: {
+          subType: 'required',
+          format: 'uuid',
+          name: skill.name,
+          category: skill.category.toLowerCase(),
+          proficiency_level: skill.proficiency_level || request?.criteria?.proficiency_level
+        }
+      }));
+    }
+
+    return [{
+      type: 'skill',
+      name: request.memberCriteria,
+      category: 'language',
+      confidence: 0.95,
+      metadata: {
+        subType: 'required',
+        format: 'name',
+        proficiency_level: request?.criteria?.proficiency_level || 2
+      }
+    }];
+  }
+
+  private extractTicketEntities(context: any, request: any): any[] {
+    if (!context?.ticket && !request?.criteria?.ticketName) {
+      return [];
+    }
+
+    if (context?.ticket) {
+      return [{
+        type: 'ticket',
+        id: context.ticket.id,
+        title: context.ticket.title,
+        status: context.ticket.status,
+        priority: context.ticket.priority,
+        confidence: 0.95,
+        metadata: {
+          subType: 'reference',
+          format: 'uuid'
+        }
+      }];
+    }
+
+    return [{
+      type: 'ticket',
+      title: request.criteria.ticketName,
+      confidence: 0.95,
+      metadata: {
+        subType: 'reference',
+        format: 'name'
+      }
+    }];
+  }
+
+  private extractTeamEntities(context: any): any[] {
+    if (!context?.existingTeams?.length) {
+      return [];
+    }
+
+    return context.existingTeams.map((team: any) => ({
+      type: 'team',
+      id: team.id,
+      name: team.name,
+      confidence: 0.95,
+      metadata: {
+        subType: 'reference',
+        format: 'uuid'
+      }
+    }));
+  }
+
+  private extractTeamMemberEntities(context: any): any[] {
+    if (!context?.qualifiedAgents?.length) {
+      return [];
+    }
+
+    return context.qualifiedAgents.map((agent: any) => ({
+      type: 'team_member',
+      id: agent.id,
+      name: agent.full_name,
+      confidence: 0.95,
+      metadata: {
+        subType: 'reference',
+        format: 'uuid',
+        proficiency_level: agent.proficiency_level,
+        current_teams: agent.current_teams
+      }
+    }));
+  }
+
+  private validateAndPackageEntities(entities: Record<string, any[]>): string {
+    const output = EntityRecognitionOutputSchema.parse({ entities });
+    return JSON.stringify(output);
+  }
+
+  async process(input: { request: any; context: any } | string): Promise<string> {
     try {
-      console.group('🔍 Entity Recognition Agent');
-      console.log('Input Query:', input);
+      const parsedInput = this.parseInput(input);
+      const { request, context } = this.extractRequestAndContext(parsedInput);
 
-      // Extract entities using LLM
-      const entities = await this.recognizeEntities(input);
-      console.log('Recognized Entities:', entities);
+      const entities: Record<string, any[]> = {
+        skill: this.extractSkillEntities(context, request),
+        ticket: this.extractTicketEntities(context, request),
+        team: this.extractTeamEntities(context),
+        team_member: this.extractTeamMemberEntities(context)
+      };
 
-      // Validate and format entities
-      const validatedEntities = await this.validateEntities(entities);
-      console.log('Validated Entities:', validatedEntities);
-
-      // Group entities by type
-      const groupedEntities = await this.groupEntities(validatedEntities);
-      console.log('Grouped Entities:', groupedEntities);
-
-      console.log('Final Output:', JSON.stringify(groupedEntities));
-      console.groupEnd();
-      return JSON.stringify(groupedEntities);
+      return this.validateAndPackageEntities(entities);
     } catch (error) {
       console.error('Entity recognition failed:', error);
-      console.groupEnd();
       throw error;
     }
-  }
-
-  async recognizeEntities(input: string): Promise<Entity[]> {
-    try {
-      const response = await this.llm.invoke(
-        `Extract entities from the following text. Return only entities with high confidence in JSON format.
-         Pay special attention to status transitions (e.g., "from X to Y") where Y is the target status.
-         Consider all possible entity types across tickets, users, and topics.
-         For IDs, extract both reference format (TK-123) and UUID format.
-
-         For status changes like "change from X to Y", extract:
-         - The target status (Y) as the main status entity
-         - The source status (X) as metadata
-
-         Text: ${input}
-         
-         Entity Categories:
-         ${Object.entries(entityCategories)
-           .map(([category, types]) => `${category}: ${types.join(', ')}`)
-           .join('\n')}
-         
-         Return format:
-         {
-           "entities": [
-             {
-               "type": "entity type from categories",
-               "value": "extracted value",
-               "confidence": number between 0 and 1,
-               "metadata": { 
-                 "format": "optional format info",
-                 "subType": "optional subtype",
-                 "fromStatus": "for status changes, the original status",
-                 "toStatus": "for status changes, the target status"
-               }
-             }
-           ]
-         }
-
-         Example for "Change Backup Strategy Review ticket from open to in progress":
-         {
-           "entities": [
-             {
-               "type": "ticket_title",
-               "value": "Backup Strategy Review",
-               "confidence": 0.95
-             },
-             {
-               "type": "status",
-               "value": "in_progress",
-               "confidence": 0.95,
-               "metadata": {
-                 "fromStatus": "open",
-                 "toStatus": "in_progress"
-               }
-             }
-           ]
-         }`
-      );
-
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-      const result = JSON.parse(content) as { entities: Entity[] };
-      
-      // Process and normalize entities
-      const processedEntities = result.entities
-        .filter(entity => entity.confidence >= this.confidenceThreshold)
-        .map(entity => this.normalizeEntity(entity));
-
-      return processedEntities;
-    } catch (error) {
-      console.error('Entity recognition failed:', error);
-      throw new Error('Failed to recognize entities');
-    }
-  }
-
-  private normalizeEntity(entity: Entity): Entity {
-    const { type, value } = entity;
-
-    // Handle different ID formats
-    switch (type) {
-      case 'TicketID':
-        if (UUID_REGEX.test(value)) {
-          return { ...entity, normalizedValue: value.toLowerCase() };
-        }
-        const ticketMatch = value.match(TICKET_REF_REGEX);
-        if (ticketMatch) {
-          return {
-            ...entity,
-            normalizedValue: ticketMatch[1],
-            metadata: { ...entity.metadata, format: 'reference' }
-          };
-        }
-        break;
-
-      case 'ArticleID':
-        if (UUID_REGEX.test(value)) {
-          return { ...entity, normalizedValue: value.toLowerCase() };
-        }
-        const kbMatch = value.match(KB_REF_REGEX);
-        if (kbMatch) {
-          return {
-            ...entity,
-            normalizedValue: kbMatch[1],
-            metadata: { ...entity.metadata, format: 'reference' }
-          };
-        }
-        break;
-
-      case 'UserID':
-      case 'AgentID':
-      case 'CustomerID':
-      case 'TeamID':
-        if (UUID_REGEX.test(value)) {
-          return { ...entity, normalizedValue: value.toLowerCase() };
-        }
-        break;
-    }
-
-    return entity;
-  }
-
-  private async groupEntities(entities: Entity[], context?: RAGContext): Promise<GroupedEntities> {
-    const grouped: GroupedEntities = {
-      tickets: [],
-      kb: [],
-      users: [],
-      topic: undefined,
-      priority: undefined,
-      context: context || {}
-    };
-
-    // Group entities by category
-    for (const entity of entities) {
-      const value = entity.normalizedValue || entity.value; // Use normalized value if available
-      
-      switch (entity.type) {
-        case 'TicketID':
-          grouped.tickets.push({
-            id: value,
-            confidence: entity.confidence,
-            ...(entity.metadata?.format && { format: entity.metadata.format })
-          });
-          break;
-        case 'UserID':
-        case 'AgentID':
-        case 'CustomerID':
-        case 'TeamID':
-          grouped.users.push({
-            id: value,
-            type: this.mapUserType(entity.type),
-            confidence: entity.confidence
-          });
-          break;
-        // Enhanced topic handling
-        case 'Authentication':
-        case 'Billing':
-        case 'Performance':
-        case 'Security':
-        case 'Integration':
-        case 'Data':
-        case 'UI/UX':
-        case 'API':
-          grouped.topic = {
-            name: value,
-            category: this.mapTopicCategory(entity.type),
-            confidence: entity.confidence,
-            tags: entity.metadata?.tags || []
-          };
-          break;
-        case 'Frontend':
-        case 'Backend':
-        case 'Database':
-        case 'Infrastructure':
-          if (grouped.topic) {
-            grouped.topic.subCategory = value;
-          } else {
-            grouped.topic = {
-              name: value,
-              category: 'Product_Area',
-              confidence: entity.confidence
-            };
-          }
-          break;
-        case 'Bug':
-        case 'Feature_Request':
-        case 'Question':
-        case 'Configuration':
-          if (grouped.topic) {
-            grouped.topic.problemType = value;
-          } else {
-            grouped.topic = {
-              name: value,
-              category: 'Problem_Type',
-              confidence: entity.confidence
-            };
-          }
-          break;
-        case 'L1_Support':
-        case 'L2_Support':
-        case 'L3_Support':
-          if (grouped.topic) {
-            grouped.topic.supportLevel = value;
-          }
-          break;
-        case 'Priority':
-          grouped.priority = value.toLowerCase();
-          grouped.tickets = grouped.tickets.map(ticket => ({
-            ...ticket,
-            priority: value.toLowerCase()
-          }));
-          break;
-        case 'Status':
-          grouped.tickets = grouped.tickets.map(ticket => ({
-            ...ticket,
-            status: value.toLowerCase()
-          }));
-          break;
-        // KB article handling
-        case 'ArticleID':
-          if (!grouped.kb) grouped.kb = [];
-          grouped.kb.push({
-            id: value,
-            confidence: entity.confidence,
-            ...(entity.metadata?.format && { format: entity.metadata.format })
-          });
-          break;
-        case 'ArticleTitle':
-          if (!grouped.kb) grouped.kb = [];
-          const existingArticle = grouped.kb.find(a => !a.title);
-          if (existingArticle) {
-            existingArticle.title = value;
-          } else {
-            grouped.kb.push({
-              title: value,
-              confidence: entity.confidence
-            });
-          }
-          break;
-        case 'ArticleCategory':
-          if (!grouped.kb) grouped.kb = [];
-          grouped.kb = grouped.kb.map(article => ({
-            ...article,
-            category: value
-          }));
-          break;
-        case 'ArticleTag':
-          if (!grouped.kb) grouped.kb = [];
-          grouped.kb = grouped.kb.map(article => ({
-            ...article,
-            tags: [...(article.tags || []), value]
-          }));
-          break;
-        case 'ArticleVersion':
-          if (!grouped.kb) grouped.kb = [];
-          grouped.kb = grouped.kb.map(article => ({
-            ...article,
-            version: value
-          }));
-          break;
-        case 'How_To':
-        case 'Troubleshooting':
-        case 'Best_Practice':
-        case 'Reference':
-        case 'FAQ':
-          if (grouped.topic) {
-            grouped.topic.kbType = entity.type as any;
-          } else {
-            grouped.topic = {
-              name: value,
-              category: 'Knowledge_Base',
-              kbType: entity.type as any,
-              confidence: entity.confidence
-            };
-          }
-          break;
-      }
-    }
-
-    return groupedEntitiesSchema.parse(grouped);
-  }
-
-  private mapUserType(entityType: string): 'agent' | 'customer' | 'team' {
-    switch (entityType) {
-      case 'AgentID':
-        return 'agent';
-      case 'CustomerID':
-        return 'customer';
-      case 'TeamID':
-        return 'team';
-      default:
-        return 'customer'; // default to customer for unknown types
-    }
-  }
-
-  private mapTopicCategory(entityType: string): string {
-    // Map entity types to broader categories
-    const categoryMap: Record<string, string> = {
-      'Authentication': 'Security',
-      'Billing': 'Business',
-      'Performance': 'Technical',
-      'Security': 'Security',
-      'Integration': 'Technical',
-      'Data': 'Technical',
-      'UI/UX': 'User_Experience',
-      'API': 'Technical'
-    };
-    
-    return categoryMap[entityType] || entityType;
-  }
-
-  private async validateEntities(entities: Entity[]): Promise<Entity[]> {
-    return entities.map(entity => {
-      try {
-        // Validate entity structure
-        const validatedEntity = entitySchema.parse(entity);
-
-        // Additional validation based on entity type
-        switch (validatedEntity.type) {
-          case 'TicketID':
-            if (!UUID_REGEX.test(validatedEntity.value) && !TICKET_REF_REGEX.test(validatedEntity.value)) {
-              validatedEntity.confidence *= 0.5; // Reduce confidence for non-standard formats
-            }
-            break;
-
-          case 'ArticleID':
-            if (!UUID_REGEX.test(validatedEntity.value) && !KB_REF_REGEX.test(validatedEntity.value)) {
-              validatedEntity.confidence *= 0.5;
-            }
-            break;
-
-          case 'UserID':
-          case 'AgentID':
-          case 'CustomerID':
-          case 'TeamID':
-            if (!UUID_REGEX.test(validatedEntity.value)) {
-              validatedEntity.confidence *= 0.5;
-            }
-            break;
-
-          case 'Status':
-            const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
-            if (!validStatuses.includes(validatedEntity.value.toLowerCase())) {
-              validatedEntity.confidence *= 0.7;
-            }
-            break;
-
-          case 'Priority':
-            const validPriorities = ['low', 'medium', 'high', 'urgent'];
-            if (!validPriorities.includes(validatedEntity.value.toLowerCase())) {
-              validatedEntity.confidence *= 0.7;
-            }
-            break;
-        }
-
-        // Filter out entities below confidence threshold after validation
-        return validatedEntity.confidence >= this.confidenceThreshold ? validatedEntity : null;
-      } catch (error) {
-        console.warn('Entity validation failed:', error);
-        return null;
-      }
-    }).filter((entity): entity is Entity => entity !== null);
   }
 } 
